@@ -3,6 +3,7 @@ using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
 using Microsoft.EntityFrameworkCore.Metadata;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using WebApplication1;
 
@@ -11,9 +12,11 @@ using WebApplication1;
 namespace WebApplication1.Migrations
 {
     [DbContext(typeof(SerenaDbContext))]
-    partial class SerenaModelSnapshot : ModelSnapshot
+    [Migration("20261121165200_AddVotesAndClinicalDocuments")]
+    partial class AddVotesAndClinicalDocuments
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -73,6 +76,48 @@ namespace WebApplication1.Migrations
                     b.ToTable("Cita", (string)null);
                 });
 
+            modelBuilder.Entity("WebApplication1.models.Comunidad", b =>
+                {
+                    b.Property<string>("id")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("centro")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.Property<int?>("creado_por_id")
+                        .HasColumnType("int");
+
+                    b.Property<string>("descripcion")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<bool>("es_oficial")
+                        .HasColumnType("bit");
+
+                    b.Property<string>("icono")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("nombre_completo")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("sub_nombre")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.HasKey("id");
+
+                    b.ToTable("Comunidad", (string)null);
+                });
+
             modelBuilder.Entity("WebApplication1.models.Diario", b =>
                 {
                     b.Property<int>("id_diario")
@@ -104,6 +149,48 @@ namespace WebApplication1.Migrations
                     b.HasIndex("id_usuario");
 
                     b.ToTable("Diario", (string)null);
+                });
+
+            modelBuilder.Entity("WebApplication1.models.Disponibilidad", b =>
+                {
+                    b.Property<int>("id_disponibilidad")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id_disponibilidad");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("id_disponibilidad"));
+
+                    b.Property<byte>("dia_semana")
+                        .HasColumnType("tinyint")
+                        .HasColumnName("dia_semana");
+
+                    b.Property<bool>("estado")
+                        .HasColumnType("bit")
+                        .HasColumnName("estado");
+
+                    b.Property<TimeSpan>("hora_fin")
+                        .HasColumnType("time")
+                        .HasColumnName("hora_fin");
+
+                    b.Property<TimeSpan>("hora_inicio")
+                        .HasColumnType("time")
+                        .HasColumnName("hora_inicio");
+
+                    b.Property<int>("id_rol")
+                        .HasColumnType("int")
+                        .HasColumnName("id_rol");
+
+                    b.Property<int>("id_usuario")
+                        .HasColumnType("int")
+                        .HasColumnName("id_usuario");
+
+                    b.HasKey("id_disponibilidad");
+
+                    b.HasIndex("id_rol");
+
+                    b.HasIndex("id_usuario");
+
+                    b.ToTable("Disponibilidad", (string)null);
                 });
 
             modelBuilder.Entity("WebApplication1.models.Emergencia", b =>
@@ -190,6 +277,47 @@ namespace WebApplication1.Migrations
                     b.ToTable("EstadoDeAnimo", (string)null);
                 });
 
+            modelBuilder.Entity("WebApplication1.models.Ficha", b =>
+                {
+                    b.Property<int>("id_ficha")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id_ficha");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("id_ficha"));
+
+                    b.Property<string>("centro")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("centro");
+
+                    b.Property<string>("codigo_ficha")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("codigo_ficha");
+
+                    b.Property<bool>("estado")
+                        .HasColumnType("bit")
+                        .HasColumnName("estado");
+
+                    b.Property<string>("jornada")
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)")
+                        .HasColumnName("jornada");
+
+                    b.Property<string>("programa")
+                        .IsRequired()
+                        .HasMaxLength(150)
+                        .HasColumnType("nvarchar(150)")
+                        .HasColumnName("programa");
+
+                    b.HasKey("id_ficha");
+
+                    b.ToTable("Ficha", (string)null);
+                });
+
             modelBuilder.Entity("WebApplication1.models.Formulario", b =>
                 {
                     b.Property<int>("id_formulario")
@@ -198,6 +326,15 @@ namespace WebApplication1.Migrations
                         .HasColumnName("id_formulario");
 
                     SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("id_formulario"));
+
+                    b.Property<string>("descripcion")
+                        .IsRequired()
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("id_comunidad")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
 
                     b.Property<int>("id_usuario")
                         .HasColumnType("int")
@@ -209,14 +346,50 @@ namespace WebApplication1.Migrations
                         .HasColumnType("nvarchar(150)")
                         .HasColumnName("nombre_formulario");
 
-                    b.Property<int?>("usuarioid_usuario")
+                    b.Property<int>("preguntas_count")
                         .HasColumnType("int");
+
+                    b.Property<string>("tiempo_estimado")
+                        .IsRequired()
+                        .HasMaxLength(50)
+                        .HasColumnType("nvarchar(50)");
 
                     b.HasKey("id_formulario");
 
-                    b.HasIndex("usuarioid_usuario");
+                    b.HasIndex("id_usuario");
 
                     b.ToTable("Formulario", (string)null);
+                });
+
+            modelBuilder.Entity("WebApplication1.models.FormularioRespuesta", b =>
+                {
+                    b.Property<int>("id_respuesta")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("id_respuesta"));
+
+                    b.Property<DateTime>("fecha_respuesta")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("id_formulario")
+                        .HasColumnType("int");
+
+                    b.Property<int>("id_usuario")
+                        .HasColumnType("int");
+
+                    b.Property<string>("respuesta")
+                        .IsRequired()
+                        .HasColumnType("nvarchar(max)");
+
+                    b.HasKey("id_respuesta");
+
+                    b.HasIndex("id_usuario");
+
+                    b.HasIndex("id_formulario", "id_usuario")
+                        .IsUnique();
+
+                    b.ToTable("FormularioRespuesta", (string)null);
                 });
 
             modelBuilder.Entity("WebApplication1.models.HistorialCita", b =>
@@ -408,6 +581,68 @@ namespace WebApplication1.Migrations
                     b.ToTable("Rol", (string)null);
                 });
 
+            modelBuilder.Entity("WebApplication1.models.SoporteClinico", b =>
+                {
+                    b.Property<int>("id_soporte")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("id_soporte"));
+
+                    b.Property<byte[]>("archivo_contenido")
+                        .IsRequired()
+                        .HasColumnType("varbinary(max)");
+
+                    b.Property<string>("archivo_nombre")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("archivo_tipo_contenido")
+                        .IsRequired()
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("diagnostico_cie10")
+                        .HasMaxLength(100)
+                        .HasColumnType("nvarchar(100)");
+
+                    b.Property<string>("entidad")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<DateTime>("fecha_emision")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("id_usuario")
+                        .HasColumnType("int");
+
+                    b.Property<string>("medico_especialista")
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("nombre_documento")
+                        .IsRequired()
+                        .HasMaxLength(200)
+                        .HasColumnType("nvarchar(200)");
+
+                    b.Property<string>("observaciones")
+                        .HasMaxLength(2000)
+                        .HasColumnType("nvarchar(2000)");
+
+                    b.Property<string>("tipo_archivo")
+                        .IsRequired()
+                        .HasMaxLength(20)
+                        .HasColumnType("nvarchar(20)");
+
+                    b.HasKey("id_soporte");
+
+                    b.HasIndex("id_usuario");
+
+                    b.ToTable("SoporteClinico", (string)null);
+                });
+
             modelBuilder.Entity("WebApplication1.models.Usuario", b =>
                 {
                     b.Property<int>("id_usuario")
@@ -463,6 +698,72 @@ namespace WebApplication1.Migrations
                     b.ToTable("Usuario", (string)null);
                 });
 
+            modelBuilder.Entity("WebApplication1.models.UsuarioFicha", b =>
+                {
+                    b.Property<int>("id_usuario_ficha")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int")
+                        .HasColumnName("id_usuario_ficha");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("id_usuario_ficha"));
+
+                    b.Property<bool>("estado")
+                        .HasColumnType("bit")
+                        .HasColumnName("estado");
+
+                    b.Property<DateTime?>("fecha_asignacion")
+                        .HasColumnType("datetime2")
+                        .HasColumnName("fecha_asignacion");
+
+                    b.Property<int>("id_ficha")
+                        .HasColumnType("int")
+                        .HasColumnName("id_ficha");
+
+                    b.Property<int>("id_usuario")
+                        .HasColumnType("int")
+                        .HasColumnName("id_usuario");
+
+                    b.HasKey("id_usuario_ficha");
+
+                    b.HasIndex("id_ficha");
+
+                    b.HasIndex("id_usuario");
+
+                    b.ToTable("UsuarioFicha", (string)null);
+                });
+
+            modelBuilder.Entity("WebApplication1.models.VotoPublicacion", b =>
+                {
+                    b.Property<int>("id_voto")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("int");
+
+                    SqlServerPropertyBuilderExtensions.UseIdentityColumn(b.Property<int>("id_voto"));
+
+                    b.Property<DateTime>("fecha")
+                        .HasColumnType("datetime2");
+
+                    b.Property<int>("id_publicacion")
+                        .HasColumnType("int");
+
+                    b.Property<int>("id_usuario")
+                        .HasColumnType("int");
+
+                    b.Property<string>("tipo")
+                        .IsRequired()
+                        .HasMaxLength(10)
+                        .HasColumnType("nvarchar(10)");
+
+                    b.HasKey("id_voto");
+
+                    b.HasIndex("id_publicacion");
+
+                    b.HasIndex("id_usuario", "id_publicacion")
+                        .IsUnique();
+
+                    b.ToTable("VotoPublicacion", (string)null);
+                });
+
             modelBuilder.Entity("WebApplication1.models.Cita", b =>
                 {
                     b.HasOne("WebApplication1.models.Usuario", null)
@@ -501,6 +802,25 @@ namespace WebApplication1.Migrations
                     b.Navigation("Usuario");
                 });
 
+            modelBuilder.Entity("WebApplication1.models.Disponibilidad", b =>
+                {
+                    b.HasOne("WebApplication1.models.Rol", "Rol")
+                        .WithMany("disponibilidades")
+                        .HasForeignKey("id_rol")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.HasOne("WebApplication1.models.Usuario", "Usuario")
+                        .WithMany("disponibilidades")
+                        .HasForeignKey("id_usuario")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Rol");
+
+                    b.Navigation("Usuario");
+                });
+
             modelBuilder.Entity("WebApplication1.models.EstadoAnimoUsuario", b =>
                 {
                     b.HasOne("WebApplication1.models.EstadoDeAnimo", "EstadoDeAnimo")
@@ -524,7 +844,28 @@ namespace WebApplication1.Migrations
                 {
                     b.HasOne("WebApplication1.models.Usuario", null)
                         .WithMany("formularios")
-                        .HasForeignKey("usuarioid_usuario");
+                        .HasForeignKey("id_usuario")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("WebApplication1.models.FormularioRespuesta", b =>
+                {
+                    b.HasOne("WebApplication1.models.Formulario", "Formulario")
+                        .WithMany("respuestas")
+                        .HasForeignKey("id_formulario")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("WebApplication1.models.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("id_usuario")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Formulario");
+
+                    b.Navigation("Usuario");
                 });
 
             modelBuilder.Entity("WebApplication1.models.HistorialCita", b =>
@@ -568,6 +909,17 @@ namespace WebApplication1.Migrations
                     b.Navigation("Rol");
                 });
 
+            modelBuilder.Entity("WebApplication1.models.SoporteClinico", b =>
+                {
+                    b.HasOne("WebApplication1.models.Usuario", "Usuario")
+                        .WithMany()
+                        .HasForeignKey("id_usuario")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("Usuario");
+                });
+
             modelBuilder.Entity("WebApplication1.models.Usuario", b =>
                 {
                     b.HasOne("WebApplication1.models.Rol", "Rol")
@@ -577,6 +929,40 @@ namespace WebApplication1.Migrations
                         .IsRequired();
 
                     b.Navigation("Rol");
+                });
+
+            modelBuilder.Entity("WebApplication1.models.UsuarioFicha", b =>
+                {
+                    b.HasOne("WebApplication1.models.Ficha", "Ficha")
+                        .WithMany("usuario_fichas")
+                        .HasForeignKey("id_ficha")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("WebApplication1.models.Usuario", "Usuario")
+                        .WithMany("usuario_fichas")
+                        .HasForeignKey("id_usuario")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.Navigation("Ficha");
+
+                    b.Navigation("Usuario");
+                });
+
+            modelBuilder.Entity("WebApplication1.models.VotoPublicacion", b =>
+                {
+                    b.HasOne("WebApplication1.models.Publicaciones", null)
+                        .WithMany()
+                        .HasForeignKey("id_publicacion")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
+
+                    b.HasOne("WebApplication1.models.Usuario", null)
+                        .WithMany()
+                        .HasForeignKey("id_usuario")
+                        .OnDelete(DeleteBehavior.Cascade)
+                        .IsRequired();
                 });
 
             modelBuilder.Entity("WebApplication1.models.Cita", b =>
@@ -589,6 +975,16 @@ namespace WebApplication1.Migrations
                     b.Navigation("estado_animo_usuarios");
                 });
 
+            modelBuilder.Entity("WebApplication1.models.Ficha", b =>
+                {
+                    b.Navigation("usuario_fichas");
+                });
+
+            modelBuilder.Entity("WebApplication1.models.Formulario", b =>
+                {
+                    b.Navigation("respuestas");
+                });
+
             modelBuilder.Entity("WebApplication1.models.Menu", b =>
                 {
                     b.Navigation("MenuRol");
@@ -599,15 +995,21 @@ namespace WebApplication1.Migrations
                     b.Navigation("MenuRol");
 
                     b.Navigation("Usuario");
+
+                    b.Navigation("disponibilidades");
                 });
 
             modelBuilder.Entity("WebApplication1.models.Usuario", b =>
                 {
+                    b.Navigation("disponibilidades");
+
                     b.Navigation("estado_animo_usuarios");
 
                     b.Navigation("formularios");
 
                     b.Navigation("historial_Clinico");
+
+                    b.Navigation("usuario_fichas");
                 });
 #pragma warning restore 612, 618
         }

@@ -1,4 +1,8 @@
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Authorization;
+using System.Text;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.IdentityModel.Tokens;
 using WebApplication1;
 using WebApplication1.interfaces;
 using WebApplication1.models;
@@ -13,8 +17,36 @@ var connectionString = builder.Configuration.GetConnectionString("DefaultConnect
 if (string.IsNullOrWhiteSpace(connectionString))
     throw new InvalidOperationException("Configure ConnectionStrings:DefaultConnection o SERENA_CONNECTION_STRING antes de iniciar la API.");
 
+var jwtKey = builder.Configuration["Jwt:Key"] ?? Environment.GetEnvironmentVariable("SERENA_JWT_KEY");
+if (string.IsNullOrWhiteSpace(jwtKey) || Encoding.UTF8.GetByteCount(jwtKey) < 32)
+    throw new InvalidOperationException("Configure Jwt:Key con al menos 32 bytes mediante SERENA_JWT_KEY.");
+var jwtIssuer = builder.Configuration["Jwt:Issuer"] ?? "Serena";
+var jwtAudience = builder.Configuration["Jwt:Audience"] ?? "Serena";
+
 builder.Services.AddDbContext<SerenaDbContext>(options =>
     options.UseSqlServer(connectionString));
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.TokenValidationParameters = new TokenValidationParameters
+        {
+            ValidateIssuer = true,
+            ValidIssuer = jwtIssuer,
+            ValidateAudience = true,
+            ValidAudience = jwtAudience,
+            ValidateIssuerSigningKey = true,
+            IssuerSigningKey = new SymmetricSecurityKey(Encoding.UTF8.GetBytes(jwtKey)),
+            ValidateLifetime = true,
+            ClockSkew = TimeSpan.FromSeconds(30)
+        };
+    });
+builder.Services.AddAuthorization(options =>
+{
+    options.FallbackPolicy = new AuthorizationPolicyBuilder()
+        .RequireAuthenticatedUser()
+        .Build();
+});
 
 builder.Services.AddHsts(options =>
 {
@@ -41,6 +73,7 @@ builder.Services.AddScoped<IRol, RolRepository>();
 builder.Services.AddScoped<IUsuario, UsuarioRepository>();
 builder.Services.AddScoped<ILoginService, UsuarioRepository>();
 builder.Services.AddScoped<IPasswordService, PasswordService>();
+builder.Services.AddSingleton<IEmailSender, SmtpEmailSender>();
 
 builder.Services.AddControllers().AddJsonOptions(options =>
     options.JsonSerializerOptions.PropertyNamingPolicy = null);
@@ -70,131 +103,48 @@ if (!app.Environment.IsDevelopment())
     app.UseHsts();
 }
 
-using (var scope = app.Services.CreateScope())
+await using (var scope = app.Services.CreateAsyncScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<SerenaDbContext>();
-    db.Database.EnsureCreated();
-    db.Database.Migrate();
+    await db.Database.MigrateAsync();
 
-    if (!db.Rol.Any())
+    var rolesIniciales = new[] { "Aprendiz", "Psicólogo", "Administrador" };
+    var rolesExistentes = (await db.Rol.Select(role => role.nombre_rol).ToListAsync()).ToHashSet();
+    foreach (var role in rolesIniciales.Where(role => !rolesExistentes.Contains(role)))
     {
-        db.Rol.AddRange(
-            new Rol { nombre_rol = "Aprendiz" },
-            new Rol { nombre_rol = "Psicólogo" },
-            new Rol { nombre_rol = "Administrador" }
-        );
-        db.SaveChanges();
+        db.Rol.Add(new Rol { nombre_rol = role });
     }
+    await db.SaveChangesAsync();
 
-    if (!db.EstadoDeAnimo.Any())
+    var estadosIniciales = new[] { "Feliz", "Calmado", "Ansioso", "Triste", "Motivado" };
+    var estadosExistentes = (await db.EstadoDeAnimo.Select(state => state.nombre_estado).ToListAsync()).ToHashSet();
+    foreach (var state in estadosIniciales.Where(state => !estadosExistentes.Contains(state)))
     {
-        db.EstadoDeAnimo.AddRange(
-            new EstadoDeAnimo { nombre_estado = "Feliz" },
-            new EstadoDeAnimo { nombre_estado = "Calmado" },
-            new EstadoDeAnimo { nombre_estado = "Ansioso" },
-            new EstadoDeAnimo { nombre_estado = "Triste" },
-            new EstadoDeAnimo { nombre_estado = "Motivado" }
-        );
-        db.SaveChanges();
+        db.EstadoDeAnimo.Add(new EstadoDeAnimo { nombre_estado = state });
     }
+    await db.SaveChangesAsync();
 
-    if (!db.Usuario.Any())
+    if (!await db.Comunidad.AnyAsync(comunidad => comunidad.id == "s/CMTC"))
     {
-        var passwordService = app.Services.GetRequiredService<IPasswordService>();
-        var seedPassword = builder.Configuration["Auth:Password"]
-            ?? Environment.GetEnvironmentVariable("SERENA_SEED_PASSWORD")
-            ?? "ChangeMe!123";
-
-        var rolAprendiz = db.Rol.First(r => r.nombre_rol == "Aprendiz");
-        var rolPsicologo = db.Rol.First(r => r.nombre_rol == "Psicólogo");
-
-        var usuarios = new[]
+        db.Comunidad.Add(new Comunidad
         {
-            new Usuario { nombre_usuario = "Yonatan Acuña", email = "yacuna@soy.sena.edu.co", contrasena = seedPassword, id_rol = rolAprendiz.id_rol, num_ficha = "3288046", sede = "CMTC", centro = "CMTC", programa_formacion = "ADSO" },
-            new Usuario { nombre_usuario = "Josué Tovar", email = "jtovar@soy.sena.edu.co", contrasena = seedPassword, id_rol = rolAprendiz.id_rol, num_ficha = "3288046", sede = "CMTC", centro = "CMTC", programa_formacion = "Textil" },
-            new Usuario { nombre_usuario = "Camila Restrepo", email = "crestrepo@soy.sena.edu.co", contrasena = seedPassword, id_rol = rolAprendiz.id_rol, num_ficha = "3288046", sede = "CMTC", centro = "CMTC", programa_formacion = "Patronaje" },
-            new Usuario { nombre_usuario = "Dra. Laura Martínez", email = "lmartinez@sena.edu.co", contrasena = seedPassword, id_rol = rolPsicologo.id_rol, num_ficha = "3288046", sede = "CMTC", centro = "CMTC", programa_formacion = "Psicología" },
-            new Usuario { nombre_usuario = "Dr. Carlos Pardo", email = "cpardo@sena.edu.co", contrasena = seedPassword, id_rol = rolPsicologo.id_rol, num_ficha = "3288046", sede = "CMTC", centro = "CMTC", programa_formacion = "Orientación Vocacional" }
-        };
-
-        foreach (var Usuario in usuarios)
-        {
-            Usuario.contrasena = passwordService.HashPassword(Usuario.contrasena);
-        }
-
-        db.Usuario.AddRange(usuarios);
-        db.SaveChanges();
-    }
-
-    if (!db.Ficha.Any())
-    {
-        db.Ficha.AddRange(
-            new Ficha { codigo_ficha = "3288046", programa = "ADSO", centro = "CMTC", jornada = "Diurna", estado = true },
-            new Ficha { codigo_ficha = "2025001", programa = "Textil", centro = "CMTC", jornada = "Diurna", estado = true }
-        );
-        db.SaveChanges();
-    }
-
-    if (!db.UsuarioFicha.Any())
-    {
-        var fichaActual = db.Ficha.First(f => f.codigo_ficha == "3288046");
-        var aprendices = db.Usuario.Where(u => u.id_rol == db.Rol.First(r => r.nombre_rol == "Aprendiz").id_rol).ToList();
-        var psicologos = db.Usuario.Where(u => u.id_rol == db.Rol.First(r => r.nombre_rol == "Psicólogo").id_rol).ToList();
-
-        foreach (var aprendiz in aprendices)
-        {
-            db.UsuarioFicha.Add(new UsuarioFicha
-            {
-                id_usuario = aprendiz.id_usuario,
-                id_ficha = fichaActual.id_ficha,
-                fecha_asignacion = DateTime.UtcNow,
-                estado = true
-            });
-        }
-
-        foreach (var psicologo in psicologos)
-        {
-            db.UsuarioFicha.Add(new UsuarioFicha
-            {
-                id_usuario = psicologo.id_usuario,
-                id_ficha = fichaActual.id_ficha,
-                fecha_asignacion = DateTime.UtcNow,
-                estado = true
-            });
-        }
-
-        db.SaveChanges();
-    }
-
-    if (!db.Disponibilidad.Any())
-    {
-        var psicologos = db.Usuario.Where(u => u.id_rol == db.Rol.First(r => r.nombre_rol == "Psicólogo").id_rol).ToList();
-        foreach (var psicologo in psicologos)
-        {
-            db.Disponibilidad.AddRange(
-                new Disponibilidad
-                {
-                    id_usuario = psicologo.id_usuario,
-                    id_rol = psicologo.id_rol,
-                    dia_semana = 1,
-                    hora_inicio = new TimeSpan(9, 0, 0),
-                    hora_fin = new TimeSpan(11, 0, 0),
-                    estado = true
-                },
-                new Disponibilidad
-                {
-                    id_usuario = psicologo.id_usuario,
-                    id_rol = psicologo.id_rol,
-                    dia_semana = 3,
-                    hora_inicio = new TimeSpan(10, 0, 0),
-                    hora_fin = new TimeSpan(12, 0, 0),
-                    estado = true
-                }
-            );
-        }
-        db.SaveChanges();
+            id = "s/CMTC",
+            centro = "CMTC",
+            sub_nombre = "General",
+            nombre_completo = "Comunidad CMTC",
+            descripcion = "Espacio general de la comunidad CMTC.",
+            icono = "Building2",
+            es_oficial = true
+        });
+        await db.SaveChangesAsync();
     }
 }
+
+app.MapGet("/health", async (SerenaDbContext db, CancellationToken cancellationToken) =>
+    await db.Database.CanConnectAsync(cancellationToken)
+        ? Results.Ok(new { status = "healthy" })
+        : Results.Problem("No se pudo conectar con SQL Server.", statusCode: StatusCodes.Status503ServiceUnavailable))
+    .AllowAnonymous();
 
 if (app.Environment.IsDevelopment())
 {
@@ -207,6 +157,8 @@ if (app.Environment.IsDevelopment())
 }
 
 app.UseHttpsRedirection();
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapControllers();
 
 app.Run();

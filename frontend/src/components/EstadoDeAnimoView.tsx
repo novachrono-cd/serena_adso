@@ -27,6 +27,7 @@ import { serenaApi } from '../services/serena-api.service';
 
 interface EstadoDeAnimoViewProps {
   currentUser: Usuario;
+  catalogoEstados: EstadoDeAnimo[];
   historialEstados: EstadoDeAnimo[];
   onEstadoRegistrado: () => void;
 }
@@ -109,6 +110,7 @@ const CMTC_MOODS: AvatarMoodOption[] = [
 
 export const EstadoDeAnimoView: React.FC<EstadoDeAnimoViewProps> = ({
   currentUser,
+  catalogoEstados,
   historialEstados = [],
   onEstadoRegistrado,
 }) => {
@@ -142,13 +144,8 @@ export const EstadoDeAnimoView: React.FC<EstadoDeAnimoViewProps> = ({
         : currentMood.primaryImage;
 
       const estadoCatalogo = currentMood.id;
-      const estadoId = {
-        Feliz: 1,
-        Calmado: 2,
-        Ansioso: 3,
-        Triste: 4,
-        Motivado: 5,
-      }[estadoCatalogo] ?? 1;
+      const estadoId = catalogoEstados.find((estado) => estado.nombre_estado === estadoCatalogo)?.id_estado;
+      if (!estadoId) throw new Error('El estado seleccionado no existe en el catálogo de la base de datos.');
 
       await serenaApi.registrarEstadoDeAnimoEnApi({
         id_usuario: currentUser.id_usuario,

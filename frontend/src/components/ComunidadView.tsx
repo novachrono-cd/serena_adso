@@ -16,12 +16,12 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import { Comunidad, Usuario, Publicacion } from '../types/serena.types';
-import { serenaApi } from '../services/serena-api.service';
 
 interface ComunidadViewProps {
   comunidad: Comunidad;
   currentUser: Usuario;
   publicaciones: Publicacion[];
+  usuariosDisponibles: Usuario[];
   onVote: (id_pub: number, delta: number) => void;
   onOpenCreatePublicacion: () => void;
   onOpenAgendarConPsicologo: (psicologo: Usuario) => void;
@@ -32,6 +32,7 @@ export const ComunidadView: React.FC<ComunidadViewProps> = ({
   comunidad,
   currentUser,
   publicaciones = [],
+  usuariosDisponibles,
   onVote,
   onOpenCreatePublicacion,
   onOpenAgendarConPsicologo,
@@ -39,7 +40,9 @@ export const ComunidadView: React.FC<ComunidadViewProps> = ({
 }) => {
   const isFuncionario = currentUser.id_rol === 2 || currentUser.id_rol === 3;
   const comunidadId = comunidad?.id || 's/CMTC';
-  const integrantesFuncionarios = serenaApi.getIntegrantesComunidad(comunidadId);
+  const integrantesFuncionarios = usuariosDisponibles.filter(
+    (usuario) => (usuario.id_rol === 2 || usuario.id_rol === 3) && usuario.centro === comunidad.centro
+  );
   const [funcionarioPerfilModal, setFuncionarioPerfilModal] = useState<Usuario | null>(null);
 
   // Filtrar publicaciones específicas de esta comunidad
@@ -135,13 +138,13 @@ export const ComunidadView: React.FC<ComunidadViewProps> = ({
                     </span>
                   </div>
                   <p className="text-xs text-[#7E22CE] font-medium mt-0.5">
-                    {funcionario.especialidad || 'Bienestar Integral'}
+                    {funcionario.especialidad || 'Sin especialidad registrada'}
                   </p>
 
                   <div className="flex flex-col gap-0.5 text-[11px] text-slate-400 mt-1.5">
                     <span className="flex items-center gap-1.5">
                       <Clock className="w-3 h-3 text-slate-400" />
-                      {funcionario.horario_atencion || 'Lun-Vie 8:00 AM - 1:00 PM'}
+                      {funcionario.horario_atencion || 'Horario no registrado'}
                     </span>
                     <span className="flex items-center gap-1.5">
                       <Mail className="w-3 h-3 text-slate-400" />
@@ -291,7 +294,7 @@ export const ComunidadView: React.FC<ComunidadViewProps> = ({
                     </span>
                   </h3>
                   <p className="text-xs text-emerald-700 font-semibold">
-                    {funcionarioPerfilModal.especialidad}
+                    {funcionarioPerfilModal.especialidad || 'Sin especialidad registrada'}
                   </p>
                 </div>
               </div>
@@ -306,10 +309,10 @@ export const ComunidadView: React.FC<ComunidadViewProps> = ({
             {/* Datos de Contacto y Atención */}
             <div className="py-3 bg-slate-50 rounded-2xl p-3 my-3 border border-slate-100 text-xs text-slate-600 flex flex-col gap-1.5">
               <p>
-                <strong>Centro:</strong> {funcionarioPerfilModal.centro} (Manufactura en Textiles y Cuero)
+                <strong>Centro:</strong> {funcionarioPerfilModal.centro || 'No registrado'}
               </p>
               <p>
-                <strong>Horario de atención:</strong> {funcionarioPerfilModal.horario_atencion}
+                <strong>Horario de atención:</strong> {funcionarioPerfilModal.horario_atencion || 'No registrado'}
               </p>
               <p>
                 <strong>Contacto institucional:</strong> {funcionarioPerfilModal.email}

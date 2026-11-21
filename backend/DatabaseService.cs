@@ -5,7 +5,7 @@ namespace WebApplication1
 {
     public class SerenaDbContext : DbContext
     {
-        public SerenaDbContext(DbContextOptions options) : base(options)
+        public SerenaDbContext(DbContextOptions<SerenaDbContext> options) : base(options)
         {
         }
 
@@ -25,6 +25,12 @@ namespace WebApplication1
         public DbSet<Disponibilidad> Disponibilidad { get; set; } = null!;
         public DbSet<Ficha> Ficha { get; set; } = null!;
         public DbSet<UsuarioFicha> UsuarioFicha { get; set; } = null!;
+        public DbSet<FormularioRespuesta> FormularioRespuesta { get; set; } = null!;
+        public DbSet<Comunidad> Comunidad { get; set; } = null!;
+        public DbSet<SoporteClinico> SoporteClinico { get; set; } = null!;
+        public DbSet<VotoPublicacion> VotoPublicacion { get; set; } = null!;
+        public DbSet<PublicacionGuardada> PublicacionGuardada { get; set; } = null!;
+        public DbSet<CodigoVerificacionCorreo> CodigoVerificacionCorreo { get; set; } = null!;
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
             base.OnModelCreating(modelBuilder);
@@ -40,6 +46,7 @@ namespace WebApplication1
             modelBuilder.Entity<Usuario>().Property(u => u.email).HasColumnName("email");
             modelBuilder.Entity<Usuario>().Property(u => u.contrasena).HasColumnName("contrasena");
             modelBuilder.Entity<Usuario>().Property(u => u.id_rol).HasColumnName("id_rol");
+            modelBuilder.Entity<Usuario>().Property(u => u.email_verificado).HasDefaultValue(true);
             modelBuilder.Entity<Usuario>()
                 .HasOne(u => u.Rol)
                 .WithMany(r => r.Usuario)
@@ -69,6 +76,26 @@ namespace WebApplication1
             modelBuilder.Entity<Formulario>().Property(u => u.id_formulario).HasColumnName("id_formulario").ValueGeneratedOnAdd();
             modelBuilder.Entity<Formulario>().Property(u => u.nombre_formulario).HasColumnName("nombre_formulario");
             modelBuilder.Entity<Formulario>().Property(u => u.id_usuario).HasColumnName("id_usuario");
+            modelBuilder.Entity<Formulario>()
+                .HasOne<Usuario>()
+                .WithMany(u => u.formularios)
+                .HasForeignKey(f => f.id_usuario)
+                .OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<FormularioRespuesta>().ToTable("FormularioRespuesta");
+            modelBuilder.Entity<FormularioRespuesta>().HasKey(r => r.id_respuesta);
+            modelBuilder.Entity<FormularioRespuesta>()
+                .HasOne(r => r.Formulario)
+                .WithMany(f => f.respuestas)
+                .HasForeignKey(r => r.id_formulario)
+                .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<FormularioRespuesta>()
+                .HasOne(r => r.Usuario)
+                .WithMany()
+                .HasForeignKey(r => r.id_usuario)
+                .OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<FormularioRespuesta>()
+                .HasIndex(r => new { r.id_formulario, r.id_usuario })
+                .IsUnique();
 
 
             modelBuilder.Entity<Cita>().ToTable("Cita");
@@ -197,6 +224,67 @@ namespace WebApplication1
                 .HasForeignKey(uf => uf.id_ficha)
                 .OnDelete(DeleteBehavior.Cascade);
 
+            modelBuilder.Entity<Comunidad>().ToTable("Comunidad");
+            modelBuilder.Entity<Comunidad>().HasKey(c => c.id);
+            modelBuilder.Entity<Comunidad>().Property(c => c.id).HasMaxLength(100);
+            modelBuilder.Entity<Comunidad>().Property(c => c.centro).HasMaxLength(20).IsRequired();
+            modelBuilder.Entity<Comunidad>().Property(c => c.sub_nombre).HasMaxLength(100).IsRequired();
+            modelBuilder.Entity<Comunidad>().Property(c => c.nombre_completo).HasMaxLength(200).IsRequired();
+            modelBuilder.Entity<Comunidad>().Property(c => c.descripcion).HasMaxLength(2000).IsRequired();
+            modelBuilder.Entity<Comunidad>().Property(c => c.icono).HasMaxLength(100).IsRequired();
+
+            modelBuilder.Entity<SoporteClinico>().ToTable("SoporteClinico");
+            modelBuilder.Entity<SoporteClinico>().HasKey(s => s.id_soporte);
+            modelBuilder.Entity<SoporteClinico>()
+                .HasOne(s => s.Usuario)
+                .WithMany()
+                .HasForeignKey(s => s.id_usuario)
+                .OnDelete(DeleteBehavior.Restrict);
+            modelBuilder.Entity<SoporteClinico>().HasIndex(s => s.id_usuario);
+
+            modelBuilder.Entity<VotoPublicacion>().ToTable("VotoPublicacion");
+            modelBuilder.Entity<VotoPublicacion>().HasKey(v => v.id_voto);
+            modelBuilder.Entity<VotoPublicacion>()
+                .HasOne<Usuario>()
+                .WithMany()
+                .HasForeignKey(v => v.id_usuario)
+                .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<VotoPublicacion>()
+                .HasOne<Publicaciones>()
+                .WithMany()
+                .HasForeignKey(v => v.id_publicacion)
+                .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<VotoPublicacion>()
+                .HasIndex(v => new { v.id_usuario, v.id_publicacion })
+                .IsUnique();
+
+            modelBuilder.Entity<PublicacionGuardada>().ToTable("PublicacionGuardada");
+            modelBuilder.Entity<PublicacionGuardada>().HasKey(g => g.id_guardado);
+            modelBuilder.Entity<PublicacionGuardada>()
+                .HasOne<Usuario>()
+                .WithMany()
+                .HasForeignKey(g => g.id_usuario)
+                .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<PublicacionGuardada>()
+                .HasOne<Publicaciones>()
+                .WithMany()
+                .HasForeignKey(g => g.id_publicacion)
+                .OnDelete(DeleteBehavior.Cascade);
+            modelBuilder.Entity<PublicacionGuardada>()
+                .HasIndex(g => new { g.id_usuario, g.id_publicacion })
+                .IsUnique();
+
+            modelBuilder.Entity<CodigoVerificacionCorreo>().ToTable("CodigoVerificacionCorreo");
+            modelBuilder.Entity<CodigoVerificacionCorreo>().HasKey(c => c.id_usuario);
+            modelBuilder.Entity<CodigoVerificacionCorreo>()
+                .Property(c => c.proposito)
+                .HasMaxLength(30)
+                .HasDefaultValue("VerificacionCorreo");
+            modelBuilder.Entity<CodigoVerificacionCorreo>()
+                .HasOne(c => c.Usuario)
+                .WithOne(u => u.codigo_verificacion_correo)
+                .HasForeignKey<CodigoVerificacionCorreo>(c => c.id_usuario)
+                .OnDelete(DeleteBehavior.Cascade);
         }
 
         public async Task<bool> SaveChangesAsync()

@@ -1,5 +1,26 @@
 # WebApplication1
 
+## Ejecución local con Docker
+
+La aplicación usa SQL Server 2022 como fuente persistente. Las migraciones de EF Core se aplican al arrancar la API; solo se inicializan los catálogos de roles y estados de ánimo. No se crean usuarios, citas ni datos clínicos de demostración.
+
+1. Copia `.env.example` a `.env` y genera dos secretos diferentes (por ejemplo, con `openssl rand -base64 36`). Asígnalos a `MSSQL_SA_PASSWORD` y `SERENA_JWT_KEY`.
+2. Ejecuta `docker compose up --build -d`.
+3. Abre `http://localhost:3000`; Swagger está disponible en `http://localhost:5185/swagger`.
+4. Crea una cuenta desde la pantalla de inicio. El registro y el inicio de sesión se guardan/verifican en SQL Server.
+5. Comprueba los servicios con `docker compose ps` y los registros con `docker compose logs -f api sqlserver`.
+
+Los datos de SQL Server persisten en el volumen `serena-sql-data`; `docker compose down` conserva la base. `docker compose down -v` elimina permanentemente ese volumen y todos sus datos. No publiques el archivo `.env`.
+
+El navegador solo conserva la sesión autenticada y preferencias de interfaz; las operaciones y datos de negocio usan la API. La API requiere un JWT válido para las rutas de datos. Para desarrollo fuera de Docker, configura `ConnectionStrings__DefaultConnection` y `Jwt__Key` (mínimo 32 bytes).
+
+### Persistencia funcional
+
+Los votos, publicaciones guardadas y sus relaciones con el usuario se conservan en SQL Server. Los soportes clínicos también se almacenan allí (metadatos y archivo binario); se aceptan PDF, DOCX y JPG de hasta 10 MB y solo los roles de psicología/administración pueden consultarlos. Los archivos no se guardan en el navegador ni en el filesystem del contenedor.
+
+El registro requiere verificar el correo con un código de seis dígitos (vigencia de 15 minutos y máximo cinco intentos). El remitente configurado es `serenaadsosoporte@gmail.com` mediante Gmail SMTP con TLS. Para que Google permita el envío, activa la verificación en dos pasos de esa cuenta, genera una contraseña de aplicación en [myaccount.google.com/apppasswords](https://myaccount.google.com/apppasswords) y ponla como `SERENA_SMTP_PASSWORD` en `.env` (sin espacios). No uses la contraseña normal de Gmail ni compartas la contraseña de aplicación en el repositorio o el chat. La aplicación ya rechaza el registro si falta ese secreto o no se puede enviar el correo; la pantalla de verificación permite reenviar el código.
+
+En la pantalla de acceso, **¿Olvidaste tu contraseña?** envía un código de recuperación al correo verificado. El código vence en 15 minutos, admite hasta cinco intentos y solo puede usarse una vez. Al validarlo, se guarda la nueva contraseña con hash y ya se puede iniciar sesión; la API responde de forma genérica al solicitar el código para no revelar si una dirección está registrada.
 
 REPORTE CONSOLIDADO DE OBSERVACIONES DE SONARQUBE
 

@@ -118,12 +118,14 @@ namespace WebApplication1.Controllers
                     return BadRequest(new { mensaje = "El cuerpo de la solicitud no puede estar vacío." });
                 }
 
+                var existing = await _publicacionesrepositories.GetpublicacionesById(Publicaciones.id_publicaciones);
+                if (existing == null)
+                    return NotFound(new { mensaje = "No se pudo actualizar porque la publicación no existe." });
+
+                Publicaciones.votos = existing.votos;
                 var response = await _publicacionesrepositories.Putpublicaciones(Publicaciones);
 
-                if (response == null)
-                {
-                    return NotFound(new { mensaje = "No se pudo actualizar porque la publicación no existe." });
-                }
+                if (response == null) return NotFound();
 
                 return Ok(ToResponse(response));
             }

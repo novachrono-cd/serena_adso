@@ -9,7 +9,7 @@ import {
   X,
   Send,
 } from 'lucide-react';
-import { Usuario } from '../types/serena.types';
+import { Emergencia, Usuario } from '../types/serena.types';
 import { serenaApi } from '../services/serena-api.service';
 
 interface EmergenciaModalProps {
@@ -25,25 +25,49 @@ export const EmergenciaModal: React.FC<EmergenciaModalProps> = ({
 }) => {
   const [notificado, setNotificado] = useState(false);
   const [detalle, setDetalle] = useState('');
+  const [emergencia, setEmergencia] = useState<Emergencia | null>(null);
+  const [guardando, setGuardando] = useState(false);
+  const [error, setError] = useState('');
 
   useEffect(() => {
-    if (isOpen) {
-      serenaApi.registrarEmergencia(
-        currentUser.id_usuario,
-        'Activación de auxilio inmediato desde el botón de pánico en la plataforma.'
-      );
-    }
-  }, [isOpen, currentUser]);
+    if (!isOpen) return;
+
+    let active = true;
+    setEmergencia(null);
+    setNotificado(false);
+    setError('');
+    void serenaApi.registrarEmergencia(
+      currentUser.id_usuario,
+      'Activación de auxilio inmediato desde el botón de pánico en la plataforma.'
+    ).then((created) => {
+      if (active) setEmergencia(created);
+    }).catch((requestError: unknown) => {
+      if (active) setError(requestError instanceof Error ? requestError.message : 'No se pudo registrar la emergencia.');
+    });
+
+    return () => {
+      active = false;
+    };
+  }, [isOpen, currentUser.id_usuario]);
 
   if (!isOpen) return null;
 
-  const handleNotificarPsicologo = (e: React.FormEvent) => {
+  const handleNotificarPsicologo = async (e: React.FormEvent) => {
     e.preventDefault();
-    setNotificado(true);
-    serenaApi.registrarEmergencia(
-      currentUser.id_usuario,
-      `Detalle adicional del aprendiz: ${detalle || 'Solicita contacto telefónico urgente.'}`
-    );
+    if (!emergencia) return;
+    setGuardando(true);
+    setError('');
+    try {
+      await serenaApi.actualizarEmergenciaEnApi({
+        ...emergencia,
+        descripcion: `${emergencia.descripcion}\nDetalle adicional: ${detalle.trim() || 'Solicita contacto telefónico urgente.'}`,
+      });
+      setNotificado(true);
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'No se pudo enviar el detalle.');
+    } finally {
+      setGuardando(false);
+    }
   };
 
   return (
@@ -78,9 +102,12 @@ export const EmergenciaModal: React.FC<EmergenciaModalProps> = ({
             No estás solo(a). Tu bienestar es lo más importante.
           </p>
           <p>
-            Hemos registrado tu solicitud. A continuación tienes acceso directo a las líneas de atención psicológica gratuitas 24/7 y al equipo de Bienestar del Centro CMTC.
+            {emergencia
+              ? 'Tu solicitud quedó registrada en el sistema. A continuación tienes acceso a los servicios de emergencia.'
+              : 'Registrando tu solicitud. Si estás en peligro inmediato, llama ahora a los servicios de emergencia.'}
           </p>
         </div>
+        {error && <p role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 p-3 text-xs text-rose-800">{error}</p>}
 
         {/* Botones de Marcado Telefónico Nativo (Disparo directo HTML 'tel:') */}
         <div className="flex flex-col gap-2.5 mb-6">
@@ -150,10 +177,11 @@ export const EmergenciaModal: React.FC<EmergenciaModalProps> = ({
               />
               <button
                 type="submit"
+                disabled={!emergencia || guardando}
                 className="px-4 py-2.5 bg-rose-600 hover:bg-rose-700 text-white rounded-xl text-xs font-bold shrink-0 transition-colors flex items-center gap-1.5"
               >
                 <Send className="w-3.5 h-3.5" />
-                <span>Enviar</span>
+                <span>{guardando ? 'Enviando...' : 'Enviar'}</span>
               </button>
             </form>
           )}

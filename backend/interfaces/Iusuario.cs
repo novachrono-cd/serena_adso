@@ -10,10 +10,17 @@ namespace WebApplication1.interfaces
         Task<Usuario?> GetusuarioById(int id);
         Task<Usuario> Postusuario(Usuario Usuario);
         Task<Usuario?> Putusuario(Usuario Usuario);
-        Task<bool> Deleteusuario(int id);
+        Task<ResultadoEliminacionUsuario> Deleteusuario(int id);
         Task<Usuario?> BuscarPorCorreo(string email);
         Task<Usuario?> ValidarCredenciales(string email, string contrasena);
 
+    }
+
+    public enum ResultadoEliminacionUsuario
+    {
+        Eliminado,
+        NoEncontrado,
+        TieneDatosRelacionados
     }
 }        
 

@@ -44,18 +44,11 @@ interface ExpedienteClinicoModalProps {
   onRefreshCitas?: () => void;
 }
 
-export const ExpedienteClinicoModal: React.FC<ExpedienteClinicoModalProps> = ({
-  currentUser,
-  aprendiz,
-  isOpen,
-  onClose,
-  onRefreshCitas,
-}) => {
+export const ExpedienteClinicoModal: React.FC<ExpedienteClinicoModalProps> = (props) => {
+  const { currentUser, aprendiz, isOpen, onClose } = props;
   if (!isOpen || !aprendiz) return null;
 
-  // Validación de perfil profesional (RN-01)
-  const esPsicologoOAdmin = currentUser.id_rol === 2 || currentUser.id_rol === 3;
-  if (!esPsicologoOAdmin) {
+  if (currentUser.id_rol !== 2 && currentUser.id_rol !== 3) {
     return (
       <div className="fixed inset-0 z-50 bg-[#F8F9FA] flex items-center justify-center p-6">
         <div className="max-w-md w-full text-center space-y-3">
@@ -64,7 +57,7 @@ export const ExpedienteClinicoModal: React.FC<ExpedienteClinicoModalProps> = ({
           </div>
           <h2 className="font-bold text-slate-900 text-base">Acceso restringido</h2>
           <p className="text-xs text-slate-500 leading-relaxed">
-            Solo profesionales de psicología y bienestar autorizados por el SENA tienen permiso para consultar expedientes clínicos e historiales de aprendices.
+            Solo profesionales de psicología y bienestar autorizados tienen permiso para consultar expedientes clínicos.
           </p>
           <button
             onClick={onClose}
@@ -77,29 +70,22 @@ export const ExpedienteClinicoModal: React.FC<ExpedienteClinicoModalProps> = ({
     );
   }
 
+  return <ExpedienteClinicoModalContent {...props} aprendiz={aprendiz} />;
+};
+
+const ExpedienteClinicoModalContent: React.FC<Omit<ExpedienteClinicoModalProps, 'aprendiz'> & { aprendiz: Usuario }> = ({
+  currentUser,
+  aprendiz,
+  onClose,
+  onRefreshCitas,
+}) => {
   // Estados de datos
-  const [historia, setHistoria] = useState<HistoriaClinica | undefined>(() =>
-    serenaApi.getHistoriaClinica(aprendiz.id_usuario, currentUser.id_rol)
-  );
-  const [condiciones, setCondiciones] = useState<string[]>(() => {
-    const h = serenaApi.getHistoriaClinica(aprendiz.id_usuario, currentUser.id_rol);
-    if (h?.condiciones_lista && h.condiciones_lista.length > 0) return h.condiciones_lista;
-    if (h?.condiciones) return h.condiciones.split(',').map((c) => c.trim()).filter(Boolean);
-    return ['Estrés situacional reactivo'];
-  });
-  const [soportes, setSoportes] = useState<CertificadoSoporte[]>(() =>
-    serenaApi.getSoportesClinicos(aprendiz.id_usuario)
-  );
-  const [anotaciones, setAnotaciones] = useState<AnotacionClinica[]>(() =>
-    serenaApi.getAnotacionesClinicas(aprendiz.id_usuario)
-  );
-  const [citasAprendiz, setCitasAprendiz] = useState<Cita[]>(() => {
-    const all = serenaApi.getCitas();
-    return all.filter((c) => c.id_usuario_aprendiz === aprendiz.id_usuario);
-  });
-  const [votosUsuario, setVotosUsuario] = useState<{ upvotes: Publicacion[]; downvotes: Publicacion[] }>(() =>
-    serenaApi.getVotosUsuario(aprendiz.id_usuario)
-  );
+  const [historia, setHistoria] = useState<HistoriaClinica | undefined>();
+  const [condiciones, setCondiciones] = useState<string[]>([]);
+  const [soportes, setSoportes] = useState<CertificadoSoporte[]>([]);
+  const [anotaciones, setAnotaciones] = useState<AnotacionClinica[]>([]);
+  const [citasAprendiz, setCitasAprendiz] = useState<Cita[]>([]);
+  const [votosUsuario, setVotosUsuario] = useState<{ upvotes: Publicacion[]; downvotes: Publicacion[] }>({ upvotes: [], downvotes: [] });
 
   // Formulario para agregar condición
   const [nuevaCondicion, setNuevaCondicion] = useState('');
@@ -118,8 +104,10 @@ export const ExpedienteClinicoModal: React.FC<ExpedienteClinicoModalProps> = ({
     medico_especialista: '',
     diagnostico_cie10: '',
     observaciones: '',
-    tipo_archivo: 'PDF' as 'PDF' | 'DOCX' | 'JPG',
+    fecha_emision: new Date().toISOString().slice(0, 10),
   });
+  const [archivoSoporte, setArchivoSoporte] = useState<File | null>(null);
+  const [guardandoSoporte, setGuardandoSoporte] = useState(false);
 
   // Estado para añadir comentario a una cita específica
   const [comentarioCitaInputs, setComentarioCitaInputs] = useState<Record<number, string>>({});
@@ -136,107 +124,186 @@ export const ExpedienteClinicoModal: React.FC<ExpedienteClinicoModalProps> = ({
     setTimeout(() => setAlertaExito(null), 3500);
   };
 
-  // Recargar datos al cambiar de aprendiz
-  useEffect(() => {
-    if (aprendiz) {
-      const h = serenaApi.getHistoriaClinica(aprendiz.id_usuario, currentUser.id_rol);
-      setHistoria(h);
-      if (h?.condiciones_lista && h.condiciones_lista.length > 0) {
-        setCondiciones(h.condiciones_lista);
-      } else if (h?.condiciones) {
-        setCondiciones(h.condiciones.split(',').map((c) => c.trim()).filter(Boolean));
-      } else {
-        setCondiciones(['Estrés situacional reactivo']);
-      }
-      setSoportes(serenaApi.getSoportesClinicos(aprendiz.id_usuario));
-      setAnotaciones(serenaApi.getAnotacionesClinicas(aprendiz.id_usuario));
-      setCitasAprendiz(serenaApi.getCitas().filter((c) => c.id_usuario_aprendiz === aprendiz.id_usuario));
-      setVotosUsuario(serenaApi.getVotosUsuario(aprendiz.id_usuario));
-    }
-  }, [aprendiz, currentUser]);
+  const guardarHistorial = async (nuevasCondiciones: string[], antecedentes = historia?.antecedentes ?? '') => {
+    const numeroFicha = historia?.num_ficha || aprendiz.num_ficha;
+    if (!numeroFicha) throw new Error('No se puede guardar el expediente: el aprendiz no tiene una ficha registrada.');
 
-  // Manejo de condiciones
-  const handleAgregarCondicion = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!nuevaCondicion.trim()) return;
-    const actualizadas = serenaApi.agregarCondicion(aprendiz.id_usuario, nuevaCondicion.trim());
-    setCondiciones(actualizadas);
-    setNuevaCondicion('');
-    setShowAddCondicion(false);
-    mostrarMensaje('Condición diagnóstica añadida al expediente.');
+    const actualizado = await serenaApi.guardarHistorialClinicoEnApi({
+      id_h_clinico: historia?.id_h_clinico ?? 0,
+      id_usuario: aprendiz.id_usuario,
+      num_ficha: numeroFicha,
+      fecha_apertura: historia?.fecha_apertura ?? new Date().toISOString(),
+      condiciones: nuevasCondiciones.join(', '),
+      antecedentes,
+    });
+    setHistoria(actualizado);
+    return actualizado;
   };
 
-  const handleEliminarCondicion = (cond: string) => {
-    const actualizadas = serenaApi.eliminarCondicion(aprendiz.id_usuario, cond);
-    setCondiciones(actualizadas);
-    mostrarMensaje('Condición eliminada del registro.');
+  // Recargar datos al cambiar de aprendiz
+  useEffect(() => {
+    let active = true;
+    void (async () => {
+      try {
+        const [h, citas, historialCitas, soportesUsuario, votos] = await Promise.all([
+          serenaApi.getHistorialClinicoDesdeApi(aprendiz.id_usuario),
+          serenaApi.getCitasDesdeApi(),
+          serenaApi.getHistorialCitasDesdeApi(),
+          serenaApi.getSoportesClinicosDesdeApi(aprendiz.id_usuario),
+          serenaApi.getVotosUsuarioDesdeApi(aprendiz.id_usuario),
+        ]);
+        if (!active) return;
+      setHistoria(h);
+        const condicionesActuales = h?.condiciones.split(',').map((value) => value.trim()).filter(Boolean) ?? [];
+        setCondiciones(condicionesActuales);
+        setAnotaciones(h?.antecedentes ? [{
+          id_anotacion: h.id_h_clinico,
+          id_usuario_aprendiz: aprendiz.id_usuario,
+          id_usuario_psicologo: currentUser.id_usuario,
+          nombre_psicologo: currentUser.nombre_usuario,
+          fecha: h.fecha_apertura,
+          tipo: 'Evolución',
+          contenido: h.antecedentes,
+        }] : []);
+        setCitasAprendiz(citas
+          .filter((cita) => cita.id_usuario_aprendiz === aprendiz.id_usuario)
+          .map((cita) => ({
+            ...cita,
+            comentarios_sesion: historialCitas
+              .filter((item) => item.id_cita === cita.id_cita)
+              .sort((a, b) => new Date(a.fecha_cambio).getTime() - new Date(b.fecha_cambio).getTime())
+              .map((item) => item.observaciones_historial),
+          })));
+        setSoportes(soportesUsuario);
+        setVotosUsuario(votos);
+      } catch (error) {
+        mostrarMensaje(error instanceof Error ? error.message : 'No se pudo cargar el expediente.');
+      }
+    })();
+    return () => { active = false; };
+  }, [aprendiz.id_usuario, currentUser.id_usuario, currentUser.nombre_usuario]);
+
+  // Manejo de condiciones
+  const handleAgregarCondicion = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!nuevaCondicion.trim()) return;
+    const actualizadas = [...condiciones, nuevaCondicion.trim()];
+    try {
+      await guardarHistorial(actualizadas);
+      setCondiciones(actualizadas);
+      setNuevaCondicion('');
+      setShowAddCondicion(false);
+      mostrarMensaje('Condición diagnóstica guardada.');
+    } catch (error) {
+      mostrarMensaje(error instanceof Error ? error.message : 'No se pudo guardar la condición.');
+    }
+  };
+
+  const handleEliminarCondicion = async (cond: string) => {
+    const actualizadas = condiciones.filter((condition) => condition !== cond);
+    try {
+      await guardarHistorial(actualizadas);
+      setCondiciones(actualizadas);
+      mostrarMensaje('Condición eliminada del registro.');
+    } catch (error) {
+      mostrarMensaje(error instanceof Error ? error.message : 'No se pudo eliminar la condición.');
+    }
   };
 
   // Manejo de comentarios / anotaciones clínicas
-  const handleGuardarAnotacion = (e: React.FormEvent) => {
+  const handleGuardarAnotacion = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!nuevoComentarioTexto.trim()) return;
 
     setGuardandoAnotacion(true);
-    const nueva = serenaApi.agregarAnotacionClinica(
-      aprendiz.id_usuario,
-      currentUser.id_usuario,
-      currentUser.nombre_usuario,
-      tipoAnotacion,
-      nuevoComentarioTexto.trim()
-    );
-
-    setAnotaciones((prev) => [nueva, ...prev]);
-    setNuevoComentarioTexto('');
-    setGuardandoAnotacion(false);
-    mostrarMensaje('Comentario clínico guardado con firma profesional.');
+    const nota = `${new Date().toISOString()} — ${currentUser.nombre_usuario} (${tipoAnotacion}): ${nuevoComentarioTexto.trim()}`;
+    const antecedentes = [historia?.antecedentes, nota].filter(Boolean).join('\n');
+    try {
+      const actualizado = await guardarHistorial(condiciones, antecedentes);
+      setAnotaciones([{
+        id_anotacion: actualizado.id_h_clinico,
+        id_usuario_aprendiz: aprendiz.id_usuario,
+        id_usuario_psicologo: currentUser.id_usuario,
+        nombre_psicologo: currentUser.nombre_usuario,
+        fecha: actualizado.fecha_apertura,
+        tipo: 'Evolución',
+        contenido: actualizado.antecedentes ?? '',
+      }]);
+      setNuevoComentarioTexto('');
+      mostrarMensaje('Nota guardada en el historial clínico.');
+    } catch (error) {
+      mostrarMensaje(error instanceof Error ? error.message : 'No se pudo guardar la nota.');
+    } finally {
+      setGuardandoAnotacion(false);
+    }
   };
 
   // Manejo de soportes clínicos y certificados
-  const handleGuardarSoporte = (e: React.FormEvent) => {
+  const handleGuardarSoporte = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!nuevoSoporte.nombre_documento.trim() || !nuevoSoporte.entidad.trim()) {
-      setAlertaExito('Por favor indica el nombre del documento y la entidad emisora.');
+    if (!archivoSoporte) {
+      mostrarMensaje('Selecciona el archivo del soporte médico.');
       return;
     }
 
-    const creado = serenaApi.agregarSoporteClinico({
-      id_usuario: aprendiz.id_usuario,
-      nombre_documento: nuevoSoporte.nombre_documento.trim(),
-      entidad: nuevoSoporte.entidad.trim(),
-      medico_especialista: nuevoSoporte.medico_especialista.trim() || 'Médico tratante no especificado',
-      diagnostico_cie10: nuevoSoporte.diagnostico_cie10.trim(),
-      observaciones: nuevoSoporte.observaciones.trim(),
-      tipo_archivo: nuevoSoporte.tipo_archivo,
-      fecha_emision: new Date().toISOString().split('T')[0],
-      tamano: '1.1 MB',
-    });
+    setGuardandoSoporte(true);
+    try {
+      const soporte = await serenaApi.crearSoporteClinicoEnApi(aprendiz.id_usuario, nuevoSoporte, archivoSoporte);
+      setSoportes((previous) => [soporte, ...previous]);
+      setNuevoSoporte({
+        nombre_documento: '',
+        entidad: '',
+        medico_especialista: '',
+        diagnostico_cie10: '',
+        observaciones: '',
+        fecha_emision: new Date().toISOString().slice(0, 10),
+      });
+      setArchivoSoporte(null);
+      setShowAddSoporte(false);
+      mostrarMensaje('Soporte médico guardado en la base de datos.');
+    } catch (error) {
+      mostrarMensaje(error instanceof Error ? error.message : 'No se pudo guardar el soporte médico.');
+    } finally {
+      setGuardandoSoporte(false);
+    }
+  };
 
-    setSoportes((prev) => [creado, ...prev]);
-    setNuevoSoporte({
-      nombre_documento: '',
-      entidad: '',
-      medico_especialista: '',
-      diagnostico_cie10: '',
-      observaciones: '',
-      tipo_archivo: 'PDF',
-    });
-    setShowAddSoporte(false);
-    mostrarMensaje('Certificado médico registrado exitosamente.');
+  const handleDescargarSoporte = async (soporte: CertificadoSoporte) => {
+    try {
+      const blob = await serenaApi.descargarSoporteClinicoDesdeApi(soporte.id_soporte);
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = soporte.archivo_nombre;
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch (error) {
+      mostrarMensaje(error instanceof Error ? error.message : 'No se pudo descargar el soporte médico.');
+    }
   };
 
   // Manejo de comentarios en citas
-  const handleGuardarComentarioCita = (idCita: number) => {
+  const handleGuardarComentarioCita = async (idCita: number) => {
     const texto = comentarioCitaInputs[idCita];
     if (!texto || !texto.trim()) return;
 
-    serenaApi.agregarComentarioCita(idCita, texto.trim(), currentUser.nombre_usuario);
-    const all = serenaApi.getCitas();
-    setCitasAprendiz(all.filter((c) => c.id_usuario_aprendiz === aprendiz.id_usuario));
-    setComentarioCitaInputs((prev) => ({ ...prev, [idCita]: '' }));
-    setCitaActivaComentario(null);
-    if (onRefreshCitas) onRefreshCitas();
-    mostrarMensaje('Comentario registrado en la cita.');
+    try {
+      await serenaApi.registrarObservacionCitaEnApi(
+        idCita,
+        `${currentUser.nombre_usuario}: ${texto.trim()}`
+      );
+      setCitasAprendiz((previous) => previous.map((cita) =>
+        cita.id_cita === idCita
+          ? { ...cita, comentarios_sesion: [...(cita.comentarios_sesion ?? []), `${currentUser.nombre_usuario}: ${texto.trim()}`] }
+          : cita
+      ));
+      setComentarioCitaInputs((previous) => ({ ...previous, [idCita]: '' }));
+      setCitaActivaComentario(null);
+      onRefreshCitas?.();
+      mostrarMensaje('Comentario guardado en el historial de la cita.');
+    } catch (error) {
+      mostrarMensaje(error instanceof Error ? error.message : 'No se pudo guardar el comentario.');
+    }
   };
 
   return (
@@ -321,15 +388,12 @@ export const ExpedienteClinicoModal: React.FC<ExpedienteClinicoModalProps> = ({
                       {aprendiz.nombre_usuario}
                     </h1>
                     <span className="text-[11px] font-semibold px-2.5 py-0.5 rounded-full bg-[#EBF7E6] text-[#2E8500]">
-                      Aprendiz Activo
-                    </span>
-                    <span className="text-[11px] font-medium px-2.5 py-0.5 rounded-full bg-slate-200/60 text-slate-700">
-                      {aprendiz.estado_formativo || 'Etapa Lectiva'}
+                      Aprendiz
                     </span>
                   </div>
 
                   <p className="text-xs sm:text-sm text-slate-600 font-medium">
-                    {aprendiz.programa_formacion || 'Análisis y Desarrollo de Software (ADSO)'}
+                    {aprendiz.programa_formacion || 'Programa no registrado'}
                   </p>
                 </div>
               </div>
@@ -347,19 +411,19 @@ export const ExpedienteClinicoModal: React.FC<ExpedienteClinicoModalProps> = ({
                 <span className="h-7 w-px bg-slate-200" />
                 <div className="flex flex-col">
                   <span className="text-[10px] uppercase font-semibold tracking-wider text-slate-400">
-                    Soportes Médicos
+                    Historial clínico
                   </span>
                   <span className="text-lg font-bold text-slate-900">
-                    {soportes.length}
+                    {historia ? '1' : '0'}
                   </span>
                 </div>
                 <span className="h-7 w-px bg-slate-200" />
                 <div className="flex flex-col">
                   <span className="text-[10px] uppercase font-semibold tracking-wider text-slate-400">
-                    Votos en Comunidad
+                    Condiciones registradas
                   </span>
                   <span className="text-lg font-bold text-slate-900">
-                    {votosUsuario.upvotes.length + votosUsuario.downvotes.length}
+                    {condiciones.length}
                   </span>
                 </div>
               </div>
@@ -372,7 +436,7 @@ export const ExpedienteClinicoModal: React.FC<ExpedienteClinicoModalProps> = ({
                   Documento
                 </span>
                 <span className="font-semibold text-slate-800">
-                  {aprendiz.tipo_documento || 'CC'} {aprendiz.documento || '1023456789'}
+                  {[aprendiz.tipo_documento, aprendiz.documento].filter(Boolean).join(' ') || 'No registrado'}
                 </span>
               </div>
 
@@ -381,7 +445,7 @@ export const ExpedienteClinicoModal: React.FC<ExpedienteClinicoModalProps> = ({
                   Ficha SENA
                 </span>
                 <span className="font-semibold text-slate-800">
-                  {aprendiz.num_ficha || '3288046'}
+                  {aprendiz.num_ficha || 'No registrada'}
                 </span>
               </div>
 
@@ -390,7 +454,7 @@ export const ExpedienteClinicoModal: React.FC<ExpedienteClinicoModalProps> = ({
                   Centro Formativo
                 </span>
                 <span className="font-semibold text-slate-800">
-                  {aprendiz.centro} • Paloquemao
+                  {aprendiz.centro || 'No registrado'}
                 </span>
               </div>
 
@@ -399,7 +463,7 @@ export const ExpedienteClinicoModal: React.FC<ExpedienteClinicoModalProps> = ({
                   Jornada
                 </span>
                 <span className="font-semibold text-slate-800">
-                  {aprendiz.jornada || 'Diurna'}
+                  {aprendiz.jornada || 'No registrada'}
                 </span>
               </div>
 
@@ -417,7 +481,7 @@ export const ExpedienteClinicoModal: React.FC<ExpedienteClinicoModalProps> = ({
                   Teléfono
                 </span>
                 <span className="font-semibold text-slate-800">
-                  {aprendiz.telefono || '+57 301 234 5678'}
+                  {aprendiz.telefono || 'No registrado'}
                 </span>
               </div>
             </div>
@@ -531,11 +595,12 @@ export const ExpedienteClinicoModal: React.FC<ExpedienteClinicoModalProps> = ({
                     Certificados y Soportes Médicos Externos
                   </span>
                   <button
-                    onClick={() => setShowAddSoporte(!showAddSoporte)}
-                    className="text-xs font-semibold text-[#2E8500] hover:text-[#39A900] flex items-center gap-1 cursor-pointer"
+                    type="button"
+                    onClick={() => setShowAddSoporte((visible) => !visible)}
+                    className="text-xs font-semibold text-[#2E8500] flex items-center gap-1 hover:underline cursor-pointer"
                   >
                     <Plus className="w-3.5 h-3.5" />
-                    {showAddSoporte ? 'Cerrar' : 'Adjuntar soporte'}
+                    Agregar soporte
                   </button>
                 </div>
 
@@ -584,6 +649,18 @@ export const ExpedienteClinicoModal: React.FC<ExpedienteClinicoModalProps> = ({
 
                       <div>
                         <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                          Fecha de emisión
+                        </label>
+                        <input
+                          type="date"
+                          required
+                          value={nuevoSoporte.fecha_emision}
+                          onChange={(e) => setNuevoSoporte({ ...nuevoSoporte, fecha_emision: e.target.value })}
+                          className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white"
+                        />
+                      </div>
+                      <div>
+                        <label className="text-[10px] font-bold text-slate-500 block mb-1">
                           Médico Tratante / Especialista
                         </label>
                         <input
@@ -628,19 +705,33 @@ export const ExpedienteClinicoModal: React.FC<ExpedienteClinicoModalProps> = ({
                       />
                     </div>
 
+                    <div>
+                      <label className="text-[10px] font-bold text-slate-500 block mb-1">
+                        Archivo (PDF, DOCX o JPG, máximo 10 MB) *
+                      </label>
+                      <input
+                        type="file"
+                        required
+                        accept=".pdf,.docx,.jpg,.jpeg,application/pdf,application/vnd.openxmlformats-officedocument.wordprocessingml.document,image/jpeg"
+                        onChange={(e) => setArchivoSoporte(e.target.files?.[0] ?? null)}
+                        className="w-full text-xs p-2.5 rounded-xl border border-slate-200 bg-white"
+                      />
+                    </div>
+
                     <div className="flex items-center justify-end gap-2 pt-1">
                       <button
                         type="button"
-                        onClick={() => setShowAddSoporte(false)}
+                        onClick={() => { setShowAddSoporte(false); setArchivoSoporte(null); }}
                         className="px-3 py-1.5 rounded-xl text-slate-500 hover:bg-slate-200 text-xs font-semibold cursor-pointer"
                       >
                         Cancelar
                       </button>
                       <button
                         type="submit"
-                        className="px-4 py-1.5 bg-[#39A900] hover:bg-[#2E8500] text-white text-xs font-bold rounded-xl transition-colors cursor-pointer"
+                        disabled={guardandoSoporte}
+                        className="px-4 py-1.5 bg-[#39A900] hover:bg-[#2E8500] text-white text-xs font-bold rounded-xl transition-colors cursor-pointer disabled:opacity-60"
                       >
-                        Guardar Soporte
+                        {guardandoSoporte ? 'Guardando...' : 'Guardar Soporte'}
                       </button>
                     </div>
                   </form>
@@ -696,11 +787,9 @@ export const ExpedienteClinicoModal: React.FC<ExpedienteClinicoModalProps> = ({
                         )}
 
                         <div className="flex items-center justify-between pt-1 text-[11px] text-slate-400">
-                          <span>Archivo: {soporte.tipo_archivo} • {soporte.tamano || '850 KB'}</span>
+                          <span>Archivo: {soporte.tipo_archivo} • {(soporte.tamano_bytes / 1024).toFixed(0)} KB</span>
                           <button
-                            onClick={() =>
-                              mostrarMensaje(`Visualizando soporte oficial emitido por ${soporte.entidad}.`)
-                            }
+                            onClick={() => { void handleDescargarSoporte(soporte); }}
                             className="text-[#2E8500] font-semibold hover:underline flex items-center gap-1 cursor-pointer"
                           >
                             <Download className="w-3 h-3" />

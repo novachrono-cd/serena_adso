@@ -1,4 +1,5 @@
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Data.SqlClient;
 using WebApplication1.interfaces;
 using WebApplication1.models;
 
@@ -41,13 +42,36 @@ public class UsuarioRepository : IUsuario, ILoginService
         return existente;
     }
 
-    public async Task<bool> Deleteusuario(int id)
+    public async Task<ResultadoEliminacionUsuario> Deleteusuario(int id)
     {
         var existente = await context.Usuario.FirstOrDefaultAsync(x => x.id_usuario == id);
-        if (existente == null) return false;
+        if (existente == null) return ResultadoEliminacionUsuario.NoEncontrado;
+        if (await TieneDatosRelacionados(id)) return ResultadoEliminacionUsuario.TieneDatosRelacionados;
         context.Usuario.Remove(existente);
-        await context.SaveChangesAsync();
-        return true;
+        try
+        {
+            await context.SaveChangesAsync();
+            return ResultadoEliminacionUsuario.Eliminado;
+        }
+        catch (DbUpdateException exception) when (exception.InnerException is SqlException { Number: 547 })
+        {
+            return ResultadoEliminacionUsuario.TieneDatosRelacionados;
+        }
+    }
+
+    private async Task<bool> TieneDatosRelacionados(int id)
+    {
+        return await context.Cita.AnyAsync(item => item.id_usuario_aprendiz == id || item.id_usuario_psicologo == id)
+            || await context.HistorialClinico.AnyAsync(item => item.id_usuario == id)
+            || await context.Diario.AnyAsync(item => item.id_usuario == id)
+            || await context.EstadoAnimoUsuario.AnyAsync(item => item.id_usuario == id)
+            || await context.Publicaciones.AnyAsync(item => item.id_usuario == id)
+            || await context.Emergencia.AnyAsync(item => item.id_usuario == id)
+            || await context.Formulario.AnyAsync(item => item.id_usuario == id)
+            || await context.Disponibilidad.AnyAsync(item => item.id_usuario == id)
+            || await context.UsuarioFicha.AnyAsync(item => item.id_usuario == id)
+            || await context.FormularioRespuesta.AnyAsync(item => item.id_usuario == id)
+            || await context.SoporteClinico.AnyAsync(item => item.id_usuario == id);
     }
 
     public Task<Usuario?> BuscarPorCorreo(string email) =>

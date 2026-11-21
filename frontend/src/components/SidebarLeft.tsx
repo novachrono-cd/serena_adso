@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   ChevronDown,
   ChevronRight,
@@ -12,8 +12,7 @@ import {
   Smile,
 } from 'lucide-react';
 import { motion } from 'motion/react';
-import { Usuario, Comunidad, Menu, CustomFeed } from '../types/serena.types';
-import { serenaApi } from '../services/serena-api.service';
+import { Usuario, Comunidad, Menu } from '../types/serena.types';
 
 
 
@@ -67,7 +66,6 @@ interface SidebarLeftProps {
   onOpenCreatePublicacion: () => void;
   onOpenCreateSubComunidad: () => void;
   onOpenCreateFormulario: () => void;
-  onOpenCreateCustomFeed: () => void;
   onOpenCreateReporte: () => void;
   onOpenRecursoModal: (tipo: 'about' | 'blog' | 'help') => void;
   idioma?: 'es' | 'en';
@@ -84,23 +82,13 @@ export const SidebarLeft: React.FC<SidebarLeftProps> = ({
   onToggleCollapse,
   onOpenCreatePublicacion,
   onOpenCreateFormulario,
-  onOpenCreateCustomFeed,
   onOpenCreateReporte,
   onOpenRecursoModal,
   idioma = 'es',
 }) => {
   const isPsicologo = currentUser.id_rol === 2;
 
-  const [customFeeds, setCustomFeeds] = useState<CustomFeed[]>(() =>
-    serenaApi.getCustomFeeds()
-  );
-
   const [comunidadesAbiertas, setComunidadesAbiertas] = useState(true);
-  const [customFeedsAbiertos, setCustomFeedsAbiertos] = useState(true);
-
-  useEffect(() => {
-    setCustomFeeds(serenaApi.getCustomFeeds());
-  }, [currentUser.id_rol]);
 
   /* ========================================================================
      ESTILOS SOBRIOS Y UNIFICADOS (COMO EN IMAGE.PNG)
@@ -358,50 +346,6 @@ export const SidebarLeft: React.FC<SidebarLeftProps> = ({
                 </div>
 
                 <div className="h-px bg-slate-200/60 mx-2" />
-
-                {/* CUSTOM FEEDS */}
-                <div className="flex flex-col">
-                  <div
-                    onClick={() => setCustomFeedsAbiertos(!customFeedsAbiertos)}
-                    className="flex items-center justify-between px-3 py-1.5 text-[11px] font-bold text-slate-400 uppercase tracking-wider cursor-pointer hover:text-slate-700"
-                  >
-                    <span>CUSTOM FEEDS</span>
-                    {customFeedsAbiertos ? (
-                      <ChevronDown className="w-3.5 h-3.5" />
-                    ) : (
-                      <ChevronRight className="w-3.5 h-3.5" />
-                    )}
-                  </div>
-
-                  {customFeedsAbiertos && (
-                    <div className="flex flex-col gap-0.5 mt-0.5 no-scrollbar">
-                      {(customFeeds || []).map((feed) => (
-                        <button
-                          key={feed.id}
-                          onClick={() => {
-                            setActiveView('home');
-                            if (feed.comunidades && feed.comunidades[0]) {
-                              onSelectComunidad(feed.comunidades[0]);
-                            }
-                          }}
-                          className="w-full text-left px-3 py-1.5 rounded-xl text-sm font-normal text-slate-700 hover:bg-slate-100 transition-colors flex items-center gap-2.5 cursor-pointer"
-                        >
-                          <RedditExploreIcon className="w-4 h-4 text-slate-500" />
-                          <span className="truncate">{feed.nombre}</span>
-                        </button>
-                      ))}
-
-                      {/* Create Custom (plano sin resaltar, estilo image.png) */}
-                      <button
-                        onClick={onOpenCreateCustomFeed}
-                        className="w-full text-left px-3 py-1.5 rounded-xl text-sm font-normal text-slate-700 hover:bg-slate-100 transition-colors flex items-center gap-2 cursor-pointer mt-0.5"
-                      >
-                        <RedditPlusIcon className="w-4 h-4 text-slate-600" />
-                        <span>Create Custom</span>
-                      </button>
-                    </div>
-                  )}
-                </div>
 
                 <div className="h-px bg-slate-200/60 mx-2" />
 

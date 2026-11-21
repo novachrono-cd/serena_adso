@@ -197,9 +197,6 @@ export const Header: React.FC<HeaderProps> = ({
                 <span>{idioma === 'es' ? 'Arquitectura C# & Angular' : 'C# & Angular Architecture'}</span>
                 <ExternalLink className="w-3.5 h-3.5 text-slate-400" />
               </button>
-              <div className="px-3 py-1.5 text-[10px] text-slate-400">
-                SERENA v1.0 • CMTC Ficha 3288046
-              </div>
             </div>
           )}
         </div>
@@ -247,34 +244,15 @@ export const Header: React.FC<HeaderProps> = ({
             className="w-8 h-8 rounded-full hover:bg-slate-100 flex items-center justify-center text-slate-700 hover:text-slate-900 transition-colors relative cursor-pointer"
           >
             <Bell className="w-4 h-4" />
-            <span className="absolute top-1.5 right-1.5 w-2 h-2 rounded-full bg-[#63C976] ring-2 ring-white"></span>
           </button>
 
           {showNotifications && (
             <div className="absolute right-0 top-full mt-2 w-72 bg-white rounded-2xl shadow-xl border border-slate-200 p-3 z-50 text-xs animate-in fade-in zoom-in-95 duration-100">
               <div className="font-bold text-slate-900 pb-2 mb-2 border-b border-slate-100 flex items-center justify-between">
                 <span>{idioma === 'es' ? 'Notificaciones' : 'Notifications'}</span>
-                <span className="text-[10px] text-[#47A95B] font-bold bg-[#ECF9EE] px-1.5 py-0.5 rounded">
-                  2 {idioma === 'es' ? 'nuevas' : 'new'}
-                </span>
               </div>
-              <div className="flex flex-col gap-2">
-                <div className="p-2 rounded-xl bg-slate-50 border border-slate-100">
-                  <p className="font-bold text-slate-800">
-                    {idioma === 'es' ? 'Cita con Dra. Laura Martínez' : 'Appointment with Dr. Laura'}
-                  </p>
-                  <p className="text-[11px] text-slate-500">
-                    {idioma === 'es' ? 'Lunes 09:00 AM - Consultorio Bienestar CMTC' : 'Mon 09:00 AM - Wellness Office'}
-                  </p>
-                </div>
-                <div className="p-2 rounded-xl bg-purple-50/50 border border-purple-100">
-                  <p className="font-bold text-purple-900">
-                    {idioma === 'es' ? 'Nuevo tamizaje disponible' : 'New screening survey available'}
-                  </p>
-                  <p className="text-[11px] text-slate-500">
-                    {idioma === 'es' ? 'Encuesta sobre Carga Académica y Estrés' : 'Survey on Academic Stress'}
-                  </p>
-                </div>
+              <div className="p-2 text-slate-500">
+                {idioma === 'es' ? 'No tienes notificaciones.' : 'You have no notifications.'}
               </div>
             </div>
           )}

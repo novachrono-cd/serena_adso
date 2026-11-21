@@ -7,7 +7,7 @@ interface CrearSubComunidadModalProps {
   currentUser: Usuario;
   isOpen: boolean;
   onClose: () => void;
-  onComunidadCreada: (nuevaComunidadId: string) => void;
+  onComunidadCreada: (nuevaComunidadId: string) => void | Promise<void>;
 }
 
 export const CrearSubComunidadModal: React.FC<CrearSubComunidadModalProps> = ({
@@ -24,24 +24,40 @@ export const CrearSubComunidadModal: React.FC<CrearSubComunidadModalProps> = ({
   if (!isOpen) return null;
 
   const slugGenerado = subNombre.toLowerCase().trim().replace(/[^a-z0-9]/g, '-');
-  const idEsperado = `s/${currentUser.centro}/${slugGenerado || 'nombre'}`;
+  const idEsperado = currentUser.centro
+    ? `s/${currentUser.centro}/${slugGenerado || 'nombre'}`
+    : '';
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!subNombre.trim() || !descripcion.trim()) return;
+    if (!currentUser.centro) {
+      setMensaje('El centro del usuario no está registrado; no se puede crear la comunidad.');
+      return;
+    }
 
     setCreando(true);
     setMensaje(null);
-    const nueva = serenaApi.crearSubComunidad(subNombre, descripcion, currentUser);
-
-    setTimeout(() => {
+    try {
+      const nueva = await serenaApi.crearSubComunidadEnApi({
+        id: idEsperado,
+        centro: currentUser.centro,
+        sub_nombre: subNombre.trim(),
+        nombre_completo: `${idEsperado} - ${subNombre.trim()}`,
+        descripcion: descripcion.trim(),
+        icono: 'Compass',
+        es_oficial: false,
+      });
       setCreando(false);
       setSubNombre('');
       setDescripcion('');
-      onComunidadCreada(nueva.id);
+      await onComunidadCreada(nueva.id);
       onClose();
       setMensaje(`Comunidad "${nueva.id}" creada con éxito.`);
-    }, 300);
+    } catch (error) {
+      setMensaje(error instanceof Error ? error.message : 'No se pudo crear la comunidad.');
+      setCreando(false);
+    }
   };
 
   return (
@@ -73,7 +89,7 @@ export const CrearSubComunidadModal: React.FC<CrearSubComunidadModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-          {mensaje && <p className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700">{mensaje}</p>}
+          {mensaje && <p role="status" className="rounded-lg bg-emerald-50 px-3 py-2 text-xs text-emerald-700">{mensaje}</p>}
           <div>
             <label className="block text-xs font-bold text-slate-700 mb-1">
               Nombre de la Subcomunidad (Tema / Ficha / Área):

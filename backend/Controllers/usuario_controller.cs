@@ -47,8 +47,20 @@ public class UsuarioController : ControllerBase
     }
 
     [HttpDelete("{id:int}")]
-    public async Task<IActionResult> Eliminarusuario(int id) =>
-        await usuario_repositorie.Deleteusuario(id) ? NoContent() : NotFound();
+    public async Task<IActionResult> Eliminarusuario(int id)
+    {
+        var resultado = await usuario_repositorie.Deleteusuario(id);
+        return resultado switch
+        {
+            ResultadoEliminacionUsuario.Eliminado => NoContent(),
+            ResultadoEliminacionUsuario.NoEncontrado => NotFound(),
+            ResultadoEliminacionUsuario.TieneDatosRelacionados => Conflict(new
+            {
+                mensaje = "No se puede eliminar el usuario porque tiene registros asociados."
+            }),
+            _ => throw new InvalidOperationException("Resultado de eliminación de usuario desconocido.")
+        };
+    }
 
     private static Usuario Sanitizar(Usuario Usuario)
     {

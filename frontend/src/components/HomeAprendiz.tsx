@@ -22,10 +22,14 @@ import { Usuario, Publicacion, EstadoDeAnimo, Formulario } from '../types/serena
 interface HomeAprendizProps {
   currentUser: Usuario;
   publicaciones: Publicacion[];
+  historialEstados: EstadoDeAnimo[];
   psicologoAsignado?: Usuario;
   ultimoEstadoAnimo?: EstadoDeAnimo;
   formulariosPendientes: Formulario[];
   onVote: (id_pub: number, delta: number) => void;
+  votosUsuario: Record<number, number>;
+  publicacionesGuardadas: Record<number, boolean>;
+  onToggleSave: (id_pub: number) => void;
   onOpenEmergencia: () => void;
   onOpenEstadoAnimo: () => void;
   onOpenAgendarCita: () => void;
@@ -42,24 +46,17 @@ const AVATARES_CMTC = [
   { id: 'Motivado', nombre: 'Motivado', path: '/IMG/cmtc_motivado.svg', desc: 'Foco activo' },
 ];
 
-// Datos para la gráfica minimalista semanal de bienestar (Lunes a Domingo)
-const REGISTROS_SEMANALES = [
-  { dia: 'Lun', valor: 70, estado: 'Calmado' },
-  { dia: 'Mar', valor: 85, estado: 'Motivado' },
-  { dia: 'Mié', valor: 65, estado: 'Ansioso' },
-  { dia: 'Jue', valor: 90, estado: 'Feliz' },
-  { dia: 'Vie', valor: 80, estado: 'Calmado' },
-  { dia: 'Sáb', valor: 95, estado: 'Feliz' },
-  { dia: 'Dom', valor: 85, estado: 'Calmado', actual: true },
-];
-
 export const HomeAprendiz: React.FC<HomeAprendizProps> = ({
   currentUser,
   publicaciones = [],
+  historialEstados = [],
   psicologoAsignado,
   ultimoEstadoAnimo,
   formulariosPendientes = [],
   onVote,
+  votosUsuario,
+  publicacionesGuardadas,
+  onToggleSave,
   onOpenEmergencia,
   onOpenEstadoAnimo,
   onOpenAgendarCita,
@@ -71,8 +68,6 @@ export const HomeAprendiz: React.FC<HomeAprendizProps> = ({
   const [menuFiltroAbierto, setMenuFiltroAbierto] = useState(false);
   const [vistaCompacta, setVistaCompacta] = useState(false);
   const [copiedId, setCopiedId] = useState<number | null>(null);
-  const [savedPosts, setSavedPosts] = useState<number[]>([]);
-  const [userVotes, setUserVotes] = useState<Record<number, number>>({});
 
   // Respiración Consciente
   const [breathingActive, setBreathingActive] = useState(false);
@@ -102,21 +97,7 @@ export const HomeAprendiz: React.FC<HomeAprendizProps> = ({
   }, [breathingActive]);
 
   const handleVoteClick = (id_pub: number, direction: number) => {
-    const currentVote = userVotes[id_pub] || 0;
-    let newVote = 0;
-    if (currentVote === direction) {
-      newVote = 0;
-    } else {
-      newVote = direction;
-    }
-    setUserVotes((prev) => ({ ...prev, [id_pub]: newVote }));
-    onVote(id_pub, newVote - currentVote);
-  };
-
-  const toggleSave = (id_pub: number) => {
-    setSavedPosts((prev) =>
-      prev.includes(id_pub) ? prev.filter((id) => id !== id_pub) : [...prev, id_pub]
-    );
+    onVote(id_pub, direction);
   };
 
   const handleShare = (pub: Publicacion) => {
@@ -132,9 +113,14 @@ export const HomeAprendiz: React.FC<HomeAprendizProps> = ({
     return new Date(b.fecha_publicacion).getTime() - new Date(a.fecha_publicacion).getTime();
   });
 
-  const estadoActual = ultimoEstadoAnimo?.estado || 'Calmado';
-  const avatarSeleccionadoInfo =
-    AVATARES_CMTC.find((a) => a.id === estadoActual) || AVATARES_CMTC[1];
+  const estadoActual = ultimoEstadoAnimo?.nombre_estado;
+  const avatarSeleccionadoInfo = AVATARES_CMTC.find((a) => a.id === estadoActual);
+  const registrosGrafica = historialEstados.slice(-7).map((registro) => {
+    return {
+      fecha: new Date(registro.fecha_estado).toLocaleDateString('es-CO', { day: '2-digit', month: 'short' }),
+      estado: registro.nombre_estado,
+    };
+  });
 
   return (
     <div className="flex-1 grid grid-cols-1 lg:grid-cols-3 gap-6 max-w-6xl mx-auto w-full">
@@ -251,9 +237,9 @@ export const HomeAprendiz: React.FC<HomeAprendizProps> = ({
             </div>
           ) : (
             listaOrdenada.map((pub) => {
-              const userVote = userVotes[pub.id_publicaciones] || 0;
+              const userVote = votosUsuario[pub.id_publicaciones] || 0;
               const votosTotales = pub.votos || 0;
-              const isSaved = savedPosts.includes(pub.id_publicaciones);
+              const isSaved = Boolean(publicacionesGuardadas[pub.id_publicaciones]);
 
               return (
                 <article
@@ -368,7 +354,7 @@ export const HomeAprendiz: React.FC<HomeAprendizProps> = ({
                     <button
                       onClick={(e) => {
                         e.stopPropagation();
-                        toggleSave(pub.id_publicaciones);
+                        onToggleSave(pub.id_publicaciones);
                       }}
                       title={isSaved ? 'Quitar de guardados' : 'Guardar publicación'}
                       className={`inline-flex items-center justify-center bg-slate-100 hover:bg-slate-200/80 rounded-full p-2 text-xs font-medium text-slate-700 transition-colors cursor-pointer ${
@@ -441,55 +427,28 @@ export const HomeAprendiz: React.FC<HomeAprendizProps> = ({
               <p className="text-[10px] text-slate-400">Indicador cuantitativo de estabilidad</p>
             </div>
             <span className="text-[11px] font-bold text-[#581C87] bg-[#7E22CE]/10 px-2 py-0.5 rounded-full">
-              84% Estable
+              {historialEstados.length} registros
             </span>
           </div>
 
-          {/* Gráfica de Barras Minimalista (Lunes a Domingo) */}
-          <div className="pt-2 pb-1">
-            <div className="flex items-end justify-between gap-1.5 h-20 px-1 border-b border-slate-200/60 pb-1">
-              {REGISTROS_SEMANALES.map((item, idx) => {
-                const isCurrent = item.actual;
-                return (
-                  <div key={idx} className="flex-1 flex flex-col items-center gap-1 group/bar relative">
-                    {/* Tooltip con dato cuantitativo al hover */}
-                    <div className="absolute -top-7 bg-slate-800 text-white text-[9px] px-1.5 py-0.5 rounded opacity-0 group-hover/bar:opacity-100 transition-opacity pointer-events-none whitespace-nowrap z-20">
-                      {item.dia}: {item.valor}% ({item.estado})
-                    </div>
-
-                    {/* Barra minimalista */}
-                    <div className="w-full max-w-[18px] bg-slate-100 rounded-t-md overflow-hidden flex flex-col justify-end h-full">
-                      <div
-                        style={{ height: `${item.valor}%` }}
-                        className={`w-full rounded-t-md transition-all duration-500 ${
-                          isCurrent
-                            ? 'bg-[#7E22CE]'
-                            : 'bg-slate-300 group-hover/bar:bg-[#581C87]'
-                        }`}
-                      />
-                    </div>
-
-                    {/* Etiqueta del día */}
-                    <span className={`text-[10px] ${isCurrent ? 'font-bold text-[#581C87]' : 'text-slate-400'}`}>
-                      {item.dia}
-                    </span>
-                  </div>
-                );
-              })}
-            </div>
-
-            <div className="flex items-center justify-between text-[10px] text-slate-400 pt-1.5 px-1">
-              <span>Mín: 65% (Mié)</span>
-              <span className="text-[#39A900] font-semibold">+6% vs sem. anterior</span>
-              <span>Máx: 95% (Sáb)</span>
-            </div>
+          <div className="flex flex-col gap-2 pt-2">
+            {registrosGrafica.length ? registrosGrafica.map((item, idx) => (
+              <div key={`${item.fecha}-${idx}`} className="flex items-center justify-between border-b border-slate-100 pb-1 text-xs">
+                <time className="text-slate-500">{item.fecha}</time>
+                <span className="font-semibold text-slate-800">{item.estado}</span>
+              </div>
+            )) : (
+              <p className="text-xs text-slate-500">Aún no hay registros de estado de ánimo.</p>
+            )}
           </div>
 
           {/* Resumen actual del estado de hoy */}
           <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-xs">
             <div className="flex items-center gap-2">
               <Smile className="w-4 h-4 text-[#7E22CE]" />
-              <span className="text-slate-700 font-medium">Hoy: {avatarSeleccionadoInfo.nombre}</span>
+              <span className="text-slate-700 font-medium">
+                Estado más reciente: {avatarSeleccionadoInfo?.nombre || 'Sin registro'}
+              </span>
             </div>
             <button
               onClick={onOpenEstadoAnimo}
@@ -510,36 +469,10 @@ export const HomeAprendiz: React.FC<HomeAprendizProps> = ({
             </span>
           </div>
 
-          {/* Barra de progreso cuantitativa minimalista */}
           <div className="flex flex-col gap-1 py-1">
             <div className="flex items-center justify-between text-[11px]">
               <span className="text-slate-600 font-medium">Encuestas formativas</span>
-              <span className="font-bold text-[#581C87]">2 / 3 completados (67%)</span>
-            </div>
-            <div className="w-full h-1.5 bg-slate-200 rounded-full overflow-hidden">
-              <div className="h-full bg-[#7E22CE] rounded-full w-[67%]" />
-            </div>
-          </div>
-
-          <div className="flex flex-col gap-2 text-xs pt-1">
-            <div className="flex items-start gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#7E22CE] mt-1.5 shrink-0" />
-              <div>
-                <p className="font-medium text-slate-800">
-                  Taller: Manejo del estrés ante entregas
-                </p>
-                <p className="text-[10px] text-slate-400">Viernes 10:00 AM • Auditorio CMTC</p>
-              </div>
-            </div>
-
-            <div className="flex items-start gap-2">
-              <div className="w-1.5 h-1.5 rounded-full bg-[#39A900] mt-1.5 shrink-0" />
-              <div>
-                <p className="font-medium text-slate-800">
-                  Pausas activas y salud postural
-                </p>
-                <p className="text-[10px] text-slate-400">Lunes a viernes 9:30 AM</p>
-              </div>
+              <span className="font-bold text-[#581C87]">{formulariosPendientes.length} disponibles</span>
             </div>
           </div>
 

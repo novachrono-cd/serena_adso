@@ -18,45 +18,46 @@ import { ExpedienteClinicoModal } from './components/ExpedienteClinicoModal';
 import { BackendIntegrationGuideModal } from './components/BackendIntegrationGuideModal';
 import { CrearDiarioRapidoModal } from './components/CrearDiarioRapidoModal';
 import { SitioEnConstruccionModal } from './components/SitioEnConstruccionModal';
-import { CrearCustomFeedModal } from './components/CrearCustomFeedModal';
 import { CrearReporteModal } from './components/CrearReporteModal';
 
+const hasStoredSession = (): boolean => {
+  const hasToken = Boolean(localStorage.getItem('serena_access_token'));
+  const hasUser = serenaApi.getCurrentUser().id_usuario > 0;
+  if (!hasToken || !hasUser) {
+    localStorage.removeItem('serena_access_token');
+    localStorage.removeItem('serena_current_user');
+    return false;
+  }
+  return true;
+};
+
 export default function App() {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(() => {
-    if (typeof window === 'undefined') return true;
-    return Boolean(localStorage.getItem('serena_access_token'));
-  });
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(hasStoredSession);
 
   const [usuariosDisponibles, setUsuariosDisponibles] = useState<Usuario[]>([]);
+  const [catalogoEstados, setCatalogoEstados] = useState<EstadoDeAnimo[]>([]);
   const [fichasDisponibles, setFichasDisponibles] = useState<Ficha[]>([]);
   const [relacionesUsuarioFicha, setRelacionesUsuarioFicha] = useState<UsuarioFicha[]>([]);
-  const [currentUser, setCurrentUser] = useState<Usuario>(() => {
-    const storedUser = localStorage.getItem('serena_current_user');
-    if (storedUser) {
-      try {
-        return JSON.parse(storedUser) as Usuario;
-      } catch (_error) {
-        // fall back to local default user
-      }
-    }
-    return serenaApi.getCurrentUser();
-  });
+  const [currentUser, setCurrentUser] = useState<Usuario>(() => serenaApi.getCurrentUser());
 
   // Configuración de interfaz
   const [isSidebarCollapsed, setIsSidebarCollapsed] = useState<boolean>(false);
   const [idioma, setIdioma] = useState<'es' | 'en'>('es');
   const [isDarkMode, setIsDarkMode] = useState<boolean>(() => localStorage.getItem('serena_theme') === 'dark');
+  const [apiError, setApiError] = useState('');
 
   // Navegación
   const [activeView, setActiveView] = useState<string>('home');
   const [selectedComunidadId, setSelectedComunidadId] = useState<string>('s/CMTC');
 
   // Estados reactivos sincronizados con serenaApi
-  const [comunidades, setComunidades] = useState<Comunidad[]>(() => serenaApi.getComunidades());
+  const [comunidades, setComunidades] = useState<Comunidad[]>([]);
   const [publicaciones, setPublicaciones] = useState<Publicacion[]>([]);
   const [historialEstados, setHistorialEstados] = useState<EstadoDeAnimo[]>([]);
   const [citas, setCitas] = useState<Cita[]>([]);
   const [formularios, setFormularios] = useState<Formulario[]>([]);
+  const [votosUsuario, setVotosUsuario] = useState<Record<number, number>>({});
+  const [publicacionesGuardadas, setPublicacionesGuardadas] = useState<Record<number, boolean>>({});
 
   // Modales
   const [isEmergenciaOpen, setIsEmergenciaOpen] = useState<boolean>(false);
@@ -65,46 +66,78 @@ export default function App() {
   const [isExpedienteOpen, setIsExpedienteOpen] = useState<boolean>(false);
   const [isBackendGuideOpen, setIsBackendGuideOpen] = useState<boolean>(false);
   const [isCrearDiarioRapidoOpen, setIsCrearDiarioRapidoOpen] = useState<boolean>(false);
-  const [isCrearCustomFeedOpen, setIsCrearCustomFeedOpen] = useState<boolean>(false);
   const [isCrearReporteOpen, setIsCrearReporteOpen] = useState<boolean>(false);
   const [recursoModalType, setRecursoModalType] = useState<'about' | 'blog' | 'help' | null>(null);
 
   const [aprendizSeleccionado, setAprendizSeleccionado] = useState<Usuario | undefined>(undefined);
 
   useEffect(() => {
+    if (!isAuthenticated) return;
     const loadUsuarios = async () => {
       try {
-        const [usuarios, fichas, relaciones] = await Promise.all([
+        const [usuarios, fichas, relaciones, estadosCatalogo, comunidadesDesdeApi] = await Promise.all([
           serenaApi.getUsuariosDesdeApi(),
           serenaApi.getFichasDesdeApi(),
           serenaApi.getUsuarioFichaDesdeApi(),
+          serenaApi.getCatalogoEstadosDesdeApi(),
+          serenaApi.getComunidadesDesdeApi(),
         ]);
         setUsuariosDisponibles(usuarios);
         setFichasDisponibles(fichas);
         setRelacionesUsuarioFicha(relaciones);
-      } catch {
+        setCatalogoEstados(estadosCatalogo);
+        setComunidades(comunidadesDesdeApi);
+        setApiError('');
+      } catch (error) {
         setUsuariosDisponibles([]);
         setFichasDisponibles([]);
         setRelacionesUsuarioFicha([]);
+        setCatalogoEstados([]);
+        setComunidades([]);
+        setApiError(error instanceof Error ? error.message : 'No se pudieron cargar los datos de la API.');
       }
     };
 
     void loadUsuarios();
-  }, []);
+  }, [isAuthenticated]);
 
   // Actualizar historial al cambiar usuario
   useEffect(() => {
+    if (!isAuthenticated) return;
     const loadHistorialEstados = async () => {
       try {
         const estados = await serenaApi.getHistorialEstadosDesdeApi(currentUser.id_usuario);
         setHistorialEstados(estados);
-      } catch {
+        setApiError('');
+      } catch (error) {
         setHistorialEstados([]);
+        setApiError(error instanceof Error ? error.message : 'No se pudo cargar el historial de ánimo.');
       }
     };
 
     void loadHistorialEstados();
-  }, [currentUser]);
+  }, [currentUser, isAuthenticated]);
+
+  useEffect(() => {
+    if (!isAuthenticated) return;
+    let active = true;
+    void Promise.all([
+      serenaApi.getVotosUsuarioDesdeApi(currentUser.id_usuario),
+      serenaApi.getPublicacionesGuardadasDesdeApi(currentUser.id_usuario),
+    ])
+      .then(([votos, guardadas]) => {
+        if (!active) return;
+        const voteMap: Record<number, number> = {};
+        votos.upvotes.forEach((publicacion) => { voteMap[publicacion.id_publicaciones] = 1; });
+        votos.downvotes.forEach((publicacion) => { voteMap[publicacion.id_publicaciones] = -1; });
+        setVotosUsuario(voteMap);
+        setPublicacionesGuardadas(Object.fromEntries(guardadas.map((id) => [id, true])));
+      })
+      .catch((error: unknown) => {
+        if (active) setApiError(error instanceof Error ? error.message : 'No se pudieron cargar los votos.');
+      });
+    return () => { active = false; };
+  }, [currentUser.id_usuario, isAuthenticated]);
 
   const handleLoginSuccess = (usuario: Usuario, token: string) => {
     localStorage.setItem('serena_access_token', token);
@@ -117,6 +150,8 @@ export default function App() {
   const handleLogout = () => {
     localStorage.removeItem('serena_access_token');
     localStorage.removeItem('serena_current_user');
+    setVotosUsuario({});
+    setPublicacionesGuardadas({});
     setIsAuthenticated(false);
   };
 
@@ -126,42 +161,69 @@ export default function App() {
   };
 
   const handleVote = async (id_pub: number, delta: number) => {
-    const publicacion = publicaciones.find((p) => p.id_publicaciones === id_pub);
-    if (!publicacion) return;
     try {
-      await serenaApi.votarPublicacionEnApi(publicacion, delta);
+      const resultado = await serenaApi.votarPublicacionEnApi(id_pub, delta);
+      setVotosUsuario((previous) => {
+        const next = { ...previous };
+        if (resultado.voto === 'upvote') next[id_pub] = 1;
+        else if (resultado.voto === 'downvote') next[id_pub] = -1;
+        else delete next[id_pub];
+        return next;
+      });
       await handleRefreshPublicaciones();
-    } catch {
-      // Si falla, se deja el estado actual
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : 'No se pudo registrar el voto.');
+    }
+  };
+
+  const handleToggleSave = async (id_pub: number) => {
+    try {
+      const resultado = await serenaApi.cambiarGuardadoPublicacionEnApi(id_pub);
+      setPublicacionesGuardadas((previous) => ({
+        ...previous,
+        [id_pub]: resultado.guardada,
+      }));
+    } catch (error) {
+      setApiError(error instanceof Error ? error.message : 'No se pudo guardar la publicación.');
     }
   };
 
   const handleRefreshPublicaciones = async () => {
     try {
-      setPublicaciones(await serenaApi.getPublicacionesDesdeApi(selectedComunidadId));
-    } catch {
+      const publicacionesDesdeApi = await serenaApi.getPublicacionesDesdeApi(selectedComunidadId);
+      setPublicaciones(publicacionesDesdeApi.map((publicacion) => ({
+        ...publicacion,
+        autor: usuariosDisponibles.find((usuario) => usuario.id_usuario === publicacion.id_usuario),
+      })));
+      setApiError('');
+    } catch (error) {
       setPublicaciones([]);
+      setApiError(error instanceof Error ? error.message : 'No se pudieron cargar las publicaciones.');
     }
   };
 
   const handleRefreshCitas = async () => {
     try {
       setCitas(await serenaApi.getCitasDesdeApi());
-    } catch {
+      setApiError('');
+    } catch (error) {
       setCitas([]);
+      setApiError(error instanceof Error ? error.message : 'No se pudieron cargar las citas.');
     }
   };
 
   useEffect(() => {
     void handleRefreshCitas();
     void handleRefreshPublicaciones();
-  }, [selectedComunidadId]);
+  }, [selectedComunidadId, usuariosDisponibles]);
 
   const handleRefreshFormularios = async () => {
     try {
       setFormularios(await serenaApi.getFormulariosDesdeApi());
-    } catch {
+      setApiError('');
+    } catch (error) {
       setFormularios([]);
+      setApiError(error instanceof Error ? error.message : 'No se pudieron cargar los formularios.');
     }
   };
 
@@ -256,7 +318,6 @@ export default function App() {
           onOpenCreateFormulario={() => {
             setActiveView('formularios');
           }}
-          onOpenCreateCustomFeed={() => setIsCrearCustomFeedOpen(true)}
           onOpenCreateReporte={() => setIsCrearReporteOpen(true)}
           onOpenRecursoModal={(tipo) => setRecursoModalType(tipo)}
           idioma={idioma}
@@ -264,15 +325,25 @@ export default function App() {
 
         {/* ÁREA DE CONTENIDO CENTRAL INDEPENDIENTE */}
         <main className="flex-1 min-w-0 h-full overflow-y-auto bg-[#F8F9FA] p-3 sm:p-5 lg:p-6 relative">
+          {apiError && (
+            <div role="alert" className="mb-4 rounded-xl border border-rose-200 bg-rose-50 px-4 py-3 text-sm text-rose-800">
+              {apiError}
+            </div>
+          )}
+
           {activeView === 'home' && (
             currentUser.id_rol === 1 ? (
               <HomeAprendiz
                 currentUser={currentUser}
                 publicaciones={publicaciones}
+                historialEstados={historialEstados}
                 psicologoAsignado={psicologosDisponibles[0]}
                 ultimoEstadoAnimo={historialEstados[historialEstados.length - 1]}
                 formulariosPendientes={formularios}
                 onVote={handleVote}
+                votosUsuario={votosUsuario}
+                publicacionesGuardadas={publicacionesGuardadas}
+                onToggleSave={handleToggleSave}
                 onOpenEmergencia={() => setIsEmergenciaOpen(true)}
                 onOpenEstadoAnimo={() => setActiveView('estado_de_animo')}
                 onOpenAgendarCita={() => setActiveView('citas')}
@@ -286,13 +357,15 @@ export default function App() {
                 citas={citas}
                 publicaciones={publicaciones}
                 aprendicesSeguimiento={aprendicesDisponibles}
-                emergencias={serenaApi.getEmergencias()}
                 onOpenCreatePublicacion={() => setIsCrearPubOpen(true)}
                 onOpenCreateFormulario={() => setActiveView('formularios')}
                 onRefreshCitas={handleRefreshCitas}
                 onSelectAprendizDiario={handleAbrirDiarioAprendiz}
                 onSelectAprendizHistoria={handleAbrirExpediente}
                 onVote={handleVote}
+                votosUsuario={votosUsuario}
+                publicacionesGuardadas={publicacionesGuardadas}
+                onToggleSave={handleToggleSave}
                 idioma={idioma}
               />
             )
@@ -301,23 +374,26 @@ export default function App() {
           {activeView === 'estado_de_animo' && (
             <EstadoDeAnimoView
               currentUser={currentUser}
+              catalogoEstados={catalogoEstados}
               historialEstados={historialEstados}
               onEstadoRegistrado={async () => {
                 try {
                   const estados = await serenaApi.getHistorialEstadosDesdeApi(currentUser.id_usuario);
                   setHistorialEstados(estados);
-                } catch {
+                } catch (error) {
                   setHistorialEstados([]);
+                  setApiError(error instanceof Error ? error.message : 'No se pudo cargar el historial de ánimo.');
                 }
               }}
             />
           )}
 
-          {activeView === 'comunidad' && (
+          {activeView === 'comunidad' && currentComunidad && (
             <ComunidadView
               comunidad={currentComunidad}
               currentUser={currentUser}
               publicaciones={publicaciones}
+              usuariosDisponibles={usuariosDisponibles}
               onVote={handleVote}
               onOpenCreatePublicacion={() => setIsCrearPubOpen(true)}
               onOpenAgendarConPsicologo={handleAgendarConPsicologo}
@@ -325,11 +401,18 @@ export default function App() {
             />
           )}
 
-          {activeView === 'explorar' && (
+          {(activeView === 'comunidad' || activeView === 'explorar') && !currentComunidad && (
+            <div className="rounded-2xl border border-slate-200 bg-white p-8 text-center text-sm text-slate-500">
+              No hay comunidades registradas en la base de datos.
+            </div>
+          )}
+
+          {activeView === 'explorar' && currentComunidad && (
             <ComunidadView
               comunidad={currentComunidad}
               currentUser={currentUser}
               publicaciones={publicaciones}
+              usuariosDisponibles={usuariosDisponibles}
               onVote={handleVote}
               onOpenCreatePublicacion={() => setIsCrearPubOpen(true)}
               onOpenAgendarConPsicologo={handleAgendarConPsicologo}
@@ -370,8 +453,7 @@ export default function App() {
                         nombre_formulario: nombre,
                         descripcion: desc || 'Formulario de bienestar formativo',
                         id_usuario: currentUser.id_usuario,
-                        preguntas_count: 5,
-                        id_comunidad: 's/CMTC',
+                        preguntas_count: 1,
                         respondido: false,
                       });
                       await handleRefreshFormularios();
@@ -456,8 +538,8 @@ export default function App() {
         currentUser={currentUser}
         isOpen={isCrearSubComunidadOpen}
         onClose={() => setIsCrearSubComunidadOpen(false)}
-        onComunidadCreada={(nuevaId) => {
-          setComunidades([...serenaApi.getComunidades()]);
+        onComunidadCreada={async (nuevaId) => {
+          setComunidades(await serenaApi.getComunidadesDesdeApi());
           setSelectedComunidadId(nuevaId);
           setActiveView('comunidad');
         }}
@@ -472,16 +554,6 @@ export default function App() {
             setActiveView('home');
             setTimeout(() => setActiveView('diario'), 50);
           }
-        }}
-        idioma={idioma}
-      />
-
-      <CrearCustomFeedModal
-        isOpen={isCrearCustomFeedOpen}
-        onClose={() => setIsCrearCustomFeedOpen(false)}
-        comunidades={comunidades}
-        onFeedCreated={() => {
-          // refrescar feeds
         }}
         idioma={idioma}
       />

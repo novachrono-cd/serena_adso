@@ -2,6 +2,7 @@
 using Microsoft.AspNetCore.Mvc.Routing;
 using WebApplication1.interfaces;
 using WebApplication1.models;
+using Microsoft.AspNetCore.Authorization;
 
 namespace WebApplication1.Controllers
 {
@@ -125,6 +126,7 @@ namespace WebApplication1.Controllers
     }
     [Route("api/historial-Cita")]
        [ApiController]        
+    [Authorize(Roles = "2,3")]
     public class HistorialCitaController : ControllerBase
     {
         private readonly IHistorialCita HistorialCitaRepository;

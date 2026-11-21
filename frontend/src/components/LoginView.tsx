@@ -1,28 +1,20 @@
 import React, { useState } from 'react';
-
-interface LoginResponseUser {
-  id_usuario: number;
-  nombre_usuario: string;
-  email: string;
-  id_rol: number;
-  centro: 'CMTC' | 'CMM' | 'CEET';
-  num_ficha?: string;
-  avatar_url?: string;
-  telefono?: string;
-  especialidad?: string;
-  programa_formacion?: string;
-  jornada?: string;
-  estado_formativo?: string;
-}
+import { Usuario } from '../types/serena.types';
 
 interface LoginViewProps {
-  onLogin: (usuario: LoginResponseUser, token: string) => void;
+  onLogin: (usuario: Usuario, token: string) => void;
 }
 
 const registrationSteps = ['Tu nombre', 'Tu rol', 'Tu sede', 'Tu centro', 'Tu programa', 'Tu ficha', 'Tus credenciales'];
 
 export function LoginView({ onLogin }: LoginViewProps) {
   const [isRegistering, setIsRegistering] = useState(false);
+  const [awaitingEmailVerification, setAwaitingEmailVerification] = useState(false);
+  const [verificationCode, setVerificationCode] = useState('');
+  const [isRecoveringPassword, setIsRecoveringPassword] = useState(false);
+  const [awaitingPasswordResetCode, setAwaitingPasswordResetCode] = useState(false);
+  const [nuevaContrasena, setNuevaContrasena] = useState('');
+  const [confirmarNuevaContrasena, setConfirmarNuevaContrasena] = useState('');
   const [registrationStep, setRegistrationStep] = useState(0);
   const [nombre, setNombre] = useState('');
   const [rol, setRol] = useState<'aprendiz' | 'psicologo'>('aprendiz');
@@ -77,6 +69,100 @@ export function LoginView({ onLogin }: LoginViewProps) {
     setError('');
     setSuccess('');
 
+    if (isRecoveringPassword) {
+      if (!correo.trim()) {
+        setError('Ingresa el correo asociado a tu cuenta.');
+        return;
+      }
+
+      if (awaitingPasswordResetCode) {
+        if (!/^\d{6}$/.test(verificationCode)) {
+          setError('Ingresa el código de seis dígitos que recibiste.');
+          return;
+        }
+        if (nuevaContrasena.length < 8) {
+          setError('La contraseña debe tener al menos 8 caracteres.');
+          return;
+        }
+        if (nuevaContrasena !== confirmarNuevaContrasena) {
+          setError('Las contraseñas no coinciden.');
+          return;
+        }
+
+        setIsLoading(true);
+        try {
+          const response = await fetch('/api/Login/restablecer-contrasena', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              email: correo.trim(),
+              codigo: verificationCode,
+              nuevaContrasena,
+            }),
+          });
+          const payload = await response.json().catch(() => ({}));
+          if (!response.ok) throw new Error(payload?.mensaje || 'No se pudo actualizar la contraseña.');
+          setIsRecoveringPassword(false);
+          setAwaitingPasswordResetCode(false);
+          setVerificationCode('');
+          setNuevaContrasena('');
+          setConfirmarNuevaContrasena('');
+          setContrasena('');
+          setSuccess(payload?.mensaje || 'Contraseña actualizada. Ya puedes iniciar sesión.');
+        } catch (err) {
+          setError(err instanceof Error ? err.message : 'Ocurrió un error inesperado.');
+        } finally {
+          setIsLoading(false);
+        }
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const response = await fetch('/api/Login/solicitar-recuperacion', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: correo.trim() }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload?.mensaje || 'No se pudo solicitar la recuperación.');
+        setAwaitingPasswordResetCode(true);
+        setVerificationCode('');
+        setSuccess(payload?.mensaje || 'Si existe una cuenta verificada con ese correo, recibirás un código.');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Ocurrió un error inesperado.');
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
+    if (awaitingEmailVerification) {
+      if (!/^\d{6}$/.test(verificationCode)) {
+        setError('Ingresa el código de seis dígitos que recibiste.');
+        return;
+      }
+
+      setIsLoading(true);
+      try {
+        const response = await fetch('/api/Login/verificar-correo', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: correo.trim(), codigo: verificationCode }),
+        });
+        const payload = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(payload?.mensaje || 'No se pudo verificar el correo.');
+        setAwaitingEmailVerification(false);
+        setVerificationCode('');
+        setSuccess(payload?.mensaje || 'Correo verificado. Ya puedes iniciar sesión.');
+      } catch (err) {
+        setError(err instanceof Error ? err.message : 'Ocurrió un error inesperado.');
+      } finally {
+        setIsLoading(false);
+      }
+      return;
+    }
+
     if (!isRegistering) {
       if (!correo.trim() || !contrasena.trim()) {
         setError('Debe ingresar correo y contraseña.');
@@ -117,21 +203,76 @@ export function LoginView({ onLogin }: LoginViewProps) {
       });
 
       const payload = await response.json().catch(() => ({}));
+      if (isRegistering && payload?.emailPendiente) {
+        setIsRegistering(false);
+        setAwaitingEmailVerification(true);
+        setSuccess(payload.mensaje);
+        setError('');
+        return;
+      }
+      if (!isRegistering && response.status === 403) {
+        setAwaitingEmailVerification(true);
+        setSuccess(payload?.mensaje || 'Debes verificar tu correo antes de iniciar sesión.');
+        return;
+      }
       if (!response.ok) {
         throw new Error(payload?.mensaje || (isRegistering ? 'No se pudo completar el registro.' : 'No se pudo iniciar sesión.'));
       }
 
       if (isRegistering) {
-        resetRegistration();
-        setSuccess('Registro exitoso. Ahora puedes iniciar sesión.');
-        setIsLoading(false);
+        setIsRegistering(false);
+        setAwaitingEmailVerification(true);
+        setVerificationCode('');
+        setContrasena('');
+        setConfirmarContrasena('');
+        setSuccess(payload?.mensaje || 'Cuenta creada. Revisa tu correo e ingresa el código de verificación.');
         return;
       }
 
-      const usuario = payload?.usuario ?? payload?.data?.usuario;
+      const usuario = payload?.usuario ?? payload?.Usuario ?? payload?.data?.usuario ?? payload?.data?.Usuario;
       const token = payload?.token ?? payload?.data?.token;
       if (!usuario || !token) throw new Error('La respuesta del servidor no incluye usuario o token.');
       onLogin(usuario, token);
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ocurrió un error inesperado.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendVerificationCode = async () => {
+    setError('');
+    setSuccess('');
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/Login/reenviar-codigo', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: correo.trim() }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.mensaje || 'No se pudo reenviar el código.');
+      setSuccess(payload?.mensaje || 'Si la cuenta está pendiente, recibirás un nuevo código.');
+    } catch (err) {
+      setError(err instanceof Error ? err.message : 'Ocurrió un error inesperado.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendPasswordResetCode = async () => {
+    setError('');
+    setSuccess('');
+    setIsLoading(true);
+    try {
+      const response = await fetch('/api/Login/solicitar-recuperacion', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email: correo.trim() }),
+      });
+      const payload = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(payload?.mensaje || 'No se pudo reenviar el código.');
+      setSuccess(payload?.mensaje || 'Si existe una cuenta verificada, recibirás otro código.');
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Ocurrió un error inesperado.');
     } finally {
@@ -195,8 +336,8 @@ export function LoginView({ onLogin }: LoginViewProps) {
             <img src="/IMG/logo.png" alt="Logo de SERENA" className="h-full w-full object-contain" />
           </div>
           <p className="text-xs font-semibold uppercase tracking-[0.22em] text-violet-700">SERENA</p>
-          <h1 className="mt-3 text-3xl font-extrabold text-slate-900">{isRegistering ? 'Crear cuenta' : 'Iniciar sesión'}</h1>
-          <p className="mt-2 text-sm text-slate-500">{isRegistering ? registrationSteps[registrationStep] : 'Accede a tu bienestar emocional y acompañamiento SENA.'}</p>
+          <h1 className="mt-3 text-3xl font-extrabold text-slate-900">{isRecoveringPassword ? awaitingPasswordResetCode ? 'Restablecer contraseña' : 'Recuperar contraseña' : awaitingEmailVerification ? 'Verificar correo' : isRegistering ? 'Crear cuenta' : 'Iniciar sesión'}</h1>
+          <p className="mt-2 text-sm text-slate-500">{isRecoveringPassword ? awaitingPasswordResetCode ? `Si la cuenta existe, enviamos un código a ${correo}.` : 'Ingresa tu correo y te enviaremos un código para recuperar el acceso.' : awaitingEmailVerification ? `Enviamos un código de seis dígitos a ${correo}.` : isRegistering ? registrationSteps[registrationStep] : 'Accede a tu bienestar emocional y acompañamiento SENA.'}</p>
         </div>
 
         {isRegistering && (
@@ -208,7 +349,29 @@ export function LoginView({ onLogin }: LoginViewProps) {
 
         <form onSubmit={handleSubmit} className="space-y-5">
           <div key={`${isRegistering}-${registrationStep}`} className={isRegistering ? 'animate-[pulse_300ms_ease-out]' : ''}>
-            {isRegistering ? renderRegistrationStep() : (
+            {isRecoveringPassword ? (
+              <div className="space-y-5">
+                {!awaitingPasswordResetCode ? (
+                  <Field id="correo-recuperacion" label="Correo institucional" value={correo} onChange={setCorreo} placeholder="tu.correo@sena.edu.co" type="email" autoComplete="email" className={inputClass} />
+                ) : (
+                  <>
+                    <Field id="codigo-recuperacion" label="Código de recuperación" value={verificationCode} onChange={(value) => setVerificationCode(value.replace(/\D/g, '').slice(0, 6))} placeholder="123456" type="text" inputMode="numeric" autoComplete="one-time-code" className={inputClass} />
+                    <button type="button" disabled={isLoading} onClick={() => { void handleResendPasswordResetCode(); }} className="w-full text-left text-sm font-semibold text-violet-700 hover:text-violet-600 disabled:opacity-60">
+                      Reenviar código
+                    </button>
+                    <Field id="nueva-contrasena" label="Nueva contraseña" value={nuevaContrasena} onChange={setNuevaContrasena} placeholder="Mínimo 8 caracteres" type="password" autoComplete="new-password" className={inputClass} />
+                    <Field id="confirmar-nueva-contrasena" label="Confirma la nueva contraseña" value={confirmarNuevaContrasena} onChange={setConfirmarNuevaContrasena} placeholder="Repite la nueva contraseña" type="password" autoComplete="new-password" className={inputClass} />
+                  </>
+                )}
+              </div>
+            ) : awaitingEmailVerification ? (
+              <div className="space-y-5">
+                <Field id="codigo-verificacion" label="Código de verificación" value={verificationCode} onChange={(value) => setVerificationCode(value.replace(/\D/g, '').slice(0, 6))} placeholder="123456" type="text" inputMode="numeric" autoComplete="one-time-code" className={inputClass} />
+                <button type="button" disabled={isLoading} onClick={() => { void handleResendVerificationCode(); }} className="w-full text-left text-sm font-semibold text-violet-700 hover:text-violet-600 disabled:opacity-60">
+                  Reenviar código
+                </button>
+              </div>
+            ) : isRegistering ? renderRegistrationStep() : (
               <div className="space-y-5">
                 <Field id="correo" label="Correo institucional" value={correo} onChange={setCorreo} placeholder="tu.correo@sena.edu.co" type="email" autoComplete="email" className={inputClass} />
                 <Field id="contrasena" label="Contraseña" value={contrasena} onChange={setContrasena} placeholder="********" type="password" autoComplete="current-password" className={inputClass} />
@@ -222,13 +385,20 @@ export function LoginView({ onLogin }: LoginViewProps) {
           <div className="flex gap-3">
             {isRegistering && registrationStep > 0 && <button type="button" onClick={() => { setRegistrationStep((step) => step - 1); setError(''); }} className="flex-1 rounded-xl border border-violet-200 px-4 py-3 text-sm font-semibold text-violet-700 transition hover:bg-violet-50">Atrás</button>}
             <button type="submit" disabled={isLoading} className="flex flex-1 items-center justify-center rounded-xl bg-violet-700 px-4 py-3 text-base font-semibold text-white shadow-lg shadow-violet-700/20 transition hover:bg-violet-600 disabled:cursor-not-allowed disabled:opacity-70">
-              {isLoading ? (isRegistering ? 'Registrando...' : 'Iniciando sesión...') : (isRegistering ? (registrationStep === registrationSteps.length - 1 ? 'Crear cuenta' : 'Continuar') : 'Ingresar')}
+              {isLoading ? (isRecoveringPassword ? awaitingPasswordResetCode ? 'Actualizando...' : 'Enviando código...' : awaitingEmailVerification ? 'Verificando...' : isRegistering ? 'Registrando...' : 'Iniciando sesión...') : isRecoveringPassword ? awaitingPasswordResetCode ? 'Actualizar contraseña' : 'Enviar código' : awaitingEmailVerification ? 'Verificar correo' : isRegistering ? (registrationStep === registrationSteps.length - 1 ? 'Crear cuenta' : 'Continuar') : 'Ingresar'}
             </button>
           </div>
         </form>
 
-        {!isRegistering ? (
-          <button type="button" onClick={startRegistration} className="mt-5 w-full text-center text-sm font-semibold text-blue-600 transition hover:text-blue-700 hover:underline">¿No tienes cuenta? Crea una</button>
+        {isRecoveringPassword ? (
+          <button type="button" onClick={() => { setIsRecoveringPassword(false); setAwaitingPasswordResetCode(false); setVerificationCode(''); setNuevaContrasena(''); setConfirmarNuevaContrasena(''); setError(''); setSuccess(''); }} className="mt-5 w-full text-center text-sm font-semibold text-blue-600 transition hover:text-blue-700 hover:underline">Volver a iniciar sesión</button>
+        ) : awaitingEmailVerification ? (
+          <button type="button" onClick={() => { setAwaitingEmailVerification(false); setVerificationCode(''); setError(''); setSuccess(''); }} className="mt-5 w-full text-center text-sm font-semibold text-blue-600 transition hover:text-blue-700 hover:underline">Volver a iniciar sesión</button>
+        ) : !isRegistering ? (
+          <>
+            <button type="button" onClick={() => { setIsRecoveringPassword(true); setError(''); setSuccess(''); }} className="mt-5 w-full text-center text-sm font-semibold text-violet-700 transition hover:text-violet-600 hover:underline">¿Olvidaste tu contraseña?</button>
+            <button type="button" onClick={startRegistration} className="mt-3 w-full text-center text-sm font-semibold text-blue-600 transition hover:text-blue-700 hover:underline">¿No tienes cuenta? Crea una</button>
+          </>
         ) : (
           <button type="button" onClick={resetRegistration} className="mt-5 w-full text-center text-sm font-semibold text-blue-600 transition hover:text-blue-700 hover:underline">Ya tengo una cuenta</button>
         )}

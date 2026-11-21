@@ -25,7 +25,7 @@ namespace WebApplication1.models
         [Column("contrasena")]
         public required string contrasena { get; set; }
 
-        
+        public bool email_verificado { get; set; }
 
         // 1. Clave foránea explícita
         [Column("id_rol")]
@@ -47,6 +47,7 @@ namespace WebApplication1.models
         public virtual Rol? Rol { get; set; }
 
         public virtual HistorialClinico? historial_Clinico { get; set; }
+        public virtual CodigoVerificacionCorreo? codigo_verificacion_correo { get; set; }
         public virtual ICollection<Formulario> formularios { get; set; } = new List<Formulario>();
         public virtual ICollection<EstadoAnimoUsuario> estado_animo_usuarios { get; set; } = new List<EstadoAnimoUsuario>();
         public virtual ICollection<Disponibilidad> disponibilidades { get; set; } = new List<Disponibilidad>();

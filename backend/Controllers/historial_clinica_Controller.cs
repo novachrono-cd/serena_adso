@@ -5,10 +5,12 @@ using WebApplication1.models;
 namespace WebApplication1.Controllers
 {
     using Microsoft.AspNetCore.Mvc;
+    using Microsoft.AspNetCore.Authorization;
     using WebApplication1.interfaces;
 
     [Route("api/historial-clinico")]
     [ApiController]
+    [Authorize(Roles = "2,3")]
     public class HistorialClinicoController : ControllerBase
     {
         private readonly IHistorialClinico HistorialClinicoRepository;
@@ -44,7 +46,13 @@ namespace WebApplication1.Controllers
             {
                 return StatusCode(500, new { mensaje = "Ocurrió un error interno al obtener el historial clínico.", detalle = ex.Message });
             }
+        }
 
+        [HttpGet("usuario/{idUsuario:int}")]
+        public async Task<IActionResult> ObtenerPorUsuario(int idUsuario)
+        {
+            var historial = await HistorialClinicoRepository.Gethistorial_clinicoByUsuarioId(idUsuario);
+            return historial == null ? NotFound() : Ok(historial);
         }
         [HttpPost("crear")]
         public async Task<IActionResult> crear_historial_clinico([FromBody] HistorialClinico HistorialClinico)
@@ -61,6 +69,8 @@ namespace WebApplication1.Controllers
                 {
                     return BadRequest(new { mensaje = "El Usuario del historial clínico es obligatorio." });
                 }
+                if (await HistorialClinicoRepository.Gethistorial_clinicoByUsuarioId(HistorialClinico.id_usuario) != null)
+                    return Conflict(new { mensaje = "El aprendiz ya tiene un historial clínico." });
 
                 var response = await HistorialClinicoRepository.Posthistorial_clinico(HistorialClinico);
                 return Ok(response);

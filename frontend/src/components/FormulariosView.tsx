@@ -9,7 +9,6 @@ import {
   BarChart2,
   Send,
   HelpCircle,
-  Check,
 } from 'lucide-react';
 import { Usuario, Formulario } from '../types/serena.types';
 import { serenaApi } from '../services/serena-api.service';
@@ -29,35 +28,24 @@ export const FormulariosView: React.FC<FormulariosViewProps> = ({
 }) => {
   const isPsicologo = currentUser.id_rol === 2;
   const [formularioActivo, setFormularioActivo] = useState<Formulario | null>(null);
-  const [respuestas, setRespuestas] = useState<{ [key: number]: number }>({});
+  const [respuesta, setRespuesta] = useState('');
   const [completado, setCompletado] = useState(false);
+  const [error, setError] = useState('');
 
   const pendientesCount = (formularios || []).filter((f) => !f.respondido).length;
   const completadosCount = (formularios || []).filter((f) => f.respondido).length;
   const porcentaje = Math.round((completadosCount / Math.max(1, (formularios || []).length)) * 100);
 
-  const preguntasMock = [
-    '¿Con qué frecuencia te has sentido abrumado(a) por la carga académica en los últimos 7 días?',
-    '¿Has logrado mantener horarios regulares de descanso y sueño?',
-    '¿Sientes confianza para acudir al consultorio de Bienestar en caso de necesitar orientación?',
-    '¿Cómo calificarías el clima de respeto y empatía dentro de tu ambiente de formación?',
-  ];
-
-  const handleResponderPregunta = (pregIdx: number, valor: number) => {
-    setRespuestas((prev) => ({ ...prev, [pregIdx]: valor }));
-  };
-
-  const handleFinalizarCuestionario = (e: React.FormEvent) => {
+  const handleFinalizarCuestionario = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (formularioActivo) {
-      serenaApi.responderFormulario(formularioActivo.id_formulario);
+    if (!formularioActivo || !respuesta.trim()) return;
+    setError('');
+    try {
+      await serenaApi.responderFormularioEnApi(formularioActivo.id_formulario, respuesta.trim());
       setCompletado(true);
-      setTimeout(() => {
-        setCompletado(false);
-        setFormularioActivo(null);
-        setRespuestas({});
-        onRefreshFormularios();
-      }, 1500);
+      await onRefreshFormularios();
+    } catch (requestError) {
+      setError(requestError instanceof Error ? requestError.message : 'No se pudo guardar la respuesta.');
     }
   };
 
@@ -130,7 +118,7 @@ export const FormulariosView: React.FC<FormulariosViewProps> = ({
               <div>
                 <div className="flex items-center justify-between gap-2 mb-2">
                   <span className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-slate-100 text-slate-600">
-                    {form.id_comunidad || 's/CMTC'}
+                    {form.id_comunidad || 'Sin comunidad'}
                   </span>
                   {form.respondido ? (
                     <span className="text-[10px] font-semibold px-2 py-0.5 rounded-full bg-[#EBF7E6] text-[#2E8500] flex items-center gap-1">
@@ -159,7 +147,7 @@ export const FormulariosView: React.FC<FormulariosViewProps> = ({
                   <span>•</span>
                   <span className="flex items-center gap-1">
                     <Clock className="w-3.5 h-3.5 text-slate-400" />
-                    {form.tiempo_estimado || '3 min'}
+                    {form.tiempo_estimado || 'Sin estimación'}
                   </span>
                 </div>
               </div>
@@ -167,32 +155,29 @@ export const FormulariosView: React.FC<FormulariosViewProps> = ({
               {/* Acciones */}
               <div className="pt-2.5 border-t border-slate-100 flex items-center justify-between">
                 <span className="text-[10px] text-slate-400 font-normal">
-                  Bienestar CMTC
+                  {form.id_usuario === currentUser.id_usuario ? 'Creado por ti' : 'Formulario disponible'}
                 </span>
 
                 {!isPsicologo ? (
                   <button
                     onClick={() => {
                       setFormularioActivo(form);
-                      setRespuestas({});
+                      setRespuesta('');
+                      setError('');
+                      setCompletado(false);
                     }}
+                    disabled={form.respondido}
                     className={`px-3.5 py-1.5 rounded-xl text-xs font-medium transition-colors cursor-pointer ${
                       form.respondido
                         ? 'bg-slate-100 hover:bg-slate-200 text-slate-700'
                         : 'bg-slate-900 hover:bg-slate-800 text-white'
                     }`}
                   >
-                    {form.respondido ? 'Ver Respuestas' : 'Diligenciar Ahora →'}
+                    {form.respondido ? 'Respondido' : 'Responder →'}
                   </button>
                 ) : (
                   <span className="text-xs text-slate-500 font-normal">
-                    {typeof crypto !== 'undefined' && 'getRandomValues' in crypto
-                      ? (() => {
-                          const value = new Uint32Array(1);
-                          crypto.getRandomValues(value);
-                          return 14 + (value[0] % 25);
-                        })()
-                      : 18} respuestas
+                    {form.respuestas_count ?? 0} respuestas
                   </span>
                 )}
               </div>
@@ -211,7 +196,7 @@ export const FormulariosView: React.FC<FormulariosViewProps> = ({
                   {formularioActivo.nombre_formulario}
                 </h3>
                 <p className="text-xs text-slate-500">
-                  Responde con sinceridad. Tus respuestas ayudan a mejorar la atención de Bienestar.
+                  {formularioActivo.descripcion}
                 </p>
               </div>
               <button
@@ -234,29 +219,19 @@ export const FormulariosView: React.FC<FormulariosViewProps> = ({
               </div>
             ) : (
               <form onSubmit={handleFinalizarCuestionario} className="flex-1 overflow-y-auto flex flex-col gap-4 pr-1">
-                {preguntasMock.map((preg, idx) => (
-                  <div key={idx} className="p-3.5 rounded-2xl bg-slate-50 border border-slate-200/70 text-xs">
-                    <p className="font-bold text-slate-800 mb-2.5">
-                      {idx + 1}. {preg}
-                    </p>
-                    <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
-                      {['Nunca', 'A veces', 'Frecuente', 'Siempre'].map((opcion, valIdx) => (
-                        <button
-                          key={opcion}
-                          type="button"
-                          onClick={() => handleResponderPregunta(idx, valIdx)}
-                          className={`py-1.5 px-2 rounded-xl text-xs font-semibold border transition-all ${
-                            respuestas[idx] === valIdx
-                              ? 'bg-emerald-600 text-white border-emerald-600 shadow-xs'
-                              : 'bg-white hover:bg-slate-100 text-slate-700 border-slate-200'
-                          }`}
-                        >
-                          {opcion}
-                        </button>
-                      ))}
-                    </div>
-                  </div>
-                ))}
+                <label className="flex flex-col gap-2 text-xs font-bold text-slate-800">
+                  Tu respuesta
+                  <textarea
+                    required
+                    maxLength={5000}
+                    rows={6}
+                    value={respuesta}
+                    onChange={(event) => setRespuesta(event.target.value)}
+                    className="w-full rounded-xl border border-slate-200 p-3 font-normal"
+                  />
+                </label>
+
+                {error && <p role="alert" className="text-xs text-rose-700">{error}</p>}
 
                 <div className="pt-4 border-t border-slate-100 flex items-center justify-between">
                   <button
@@ -268,6 +243,7 @@ export const FormulariosView: React.FC<FormulariosViewProps> = ({
                   </button>
                   <button
                     type="submit"
+                    disabled={!respuesta.trim()}
                     className="px-6 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold shadow-md shadow-emerald-600/20"
                   >
                     Enviar Respuestas

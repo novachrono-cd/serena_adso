@@ -1,44 +1,62 @@
 services:
   sqlserver:
     image: mcr.microsoft.com/mssql/server:2022-latest
-    container_name: sqlserver_serena
-    ports:
-      - "1433:1433"
     environment:
       ACCEPT_EULA: "Y"
       MSSQL_PID: Developer
-      MSSQL_SA_PASSWORD: "Aa12345*"
+      MSSQL_SA_PASSWORD: ${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD in .env}
+    ports:
+      - "1433:1433"
+    volumes:
+      - serena-sql-data:/var/opt/mssql
     healthcheck:
-      test: ["CMD-SHELL", "/opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P 'Aa12345*' -Q 'SELECT 1' -C || exit 1"]
+      test:
+        - CMD-SHELL
+        - /opt/mssql-tools18/bin/sqlcmd -S localhost -U sa -P "$$MSSQL_SA_PASSWORD" -Q "SELECT 1" -C || exit 1
       interval: 10s
       timeout: 5s
       retries: 20
+      start_period: 30s
 
   api:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: serena_api
-    ports:
-      - "5185:8080"
     environment:
       ASPNETCORE_ENVIRONMENT: Development
-      ConnectionStrings__DefaultConnection: "Server=sqlserver,1433;Database=serena;User Id=sa;Password=Aa12345*;TrustServerCertificate=True;MultipleActiveResultSets=true"
-      Cors__AllowedOrigins__0: http://localhost:3000
-      Cors__AllowedOrigins__1: http://127.0.0.1:3000
+      ASPNETCORE_URLS: http://+:8080
+      ConnectionStrings__DefaultConnection: Server=sqlserver,1433;Database=serena;User Id=sa;Password=${MSSQL_SA_PASSWORD:?Set MSSQL_SA_PASSWORD in .env};TrustServerCertificate=True;MultipleActiveResultSets=true
+      Jwt__Key: ${SERENA_JWT_KEY:?Set SERENA_JWT_KEY in .env}
+      Jwt__Issuer: ${SERENA_JWT_ISSUER:-Serena}
+      Jwt__Audience: ${SERENA_JWT_AUDIENCE:-Serena}
+      Smtp__Host: ${SERENA_SMTP_HOST:-}
+      Smtp__Port: ${SERENA_SMTP_PORT:-587}
+      Smtp__Username: ${SERENA_SMTP_USERNAME:-}
+      Smtp__Password: ${SERENA_SMTP_PASSWORD:-}
+      Smtp__From: ${SERENA_SMTP_FROM:-}
+      Smtp__DisplayName: ${SERENA_SMTP_DISPLAY_NAME:-SERENA}
+      Smtp__EnableSsl: ${SERENA_SMTP_ENABLE_SSL:-true}
     depends_on:
       sqlserver:
         condition: service_healthy
+    ports:
+      - "5185:8080"
+    healthcheck:
+      test: ["CMD-SHELL", "curl -fsS http://localhost:8080/health || exit 1"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 45s
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: serena_frontend
     ports:
-      - "3000:3000"
-    environment:
-      VITE_API_URL: /api
-      VITE_API_PROXY_TARGET: http://api:8080
+      - "3000:8080"
     depends_on:
-      - api
+      api:
+        condition: service_started
+
+volumes:
+  serena-sql-data:

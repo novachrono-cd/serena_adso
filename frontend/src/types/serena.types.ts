@@ -1,6 +1,6 @@
 /**
  * Tipos de datos para SERENA (Plataforma Web de Acompañamiento Psicológico SENA)
- * Mapeo 1:1 con las 11 tablas relacionales del SRS IEEE 830 (SQL Server / EF Core C#)
+ * Tipos de dominio alineados con el modelo SQL Server / EF Core.
  */
 
 export interface Rol {
@@ -13,18 +13,19 @@ export interface Usuario {
   nombre_usuario: string;
   email: string;
   id_rol: number;
-  centro: 'CMTC' | 'CMM' | 'CEET';
+  email_verificado?: boolean;
+  centro?: string;
   num_ficha?: string;
   avatar_url?: string;
   especialidad?: string; // Para psicólogos
   telefono?: string;
   horario_atencion?: string; // Ej: "Lunes a Viernes 8:00 AM - 12:00 PM"
   disponibilidad?: string[]; // Franjas horarias disponibles
-  tipo_documento?: 'CC' | 'TI' | 'CE' | 'PEP';
+  tipo_documento?: string;
   documento?: string;
   programa_formacion?: string;
-  jornada?: 'Diurna' | 'Nocturna' | 'Mixta' | 'Fines de Semana';
-  estado_formativo?: 'Etapa Lectiva' | 'Etapa Productiva' | 'Condicionado' | 'Egresado';
+  jornada?: string;
+  estado_formativo?: string;
 }
 
 export interface Menu {
@@ -83,7 +84,8 @@ export interface CertificadoSoporte {
   fecha_emision: string;
   medico_especialista?: string;
   tipo_archivo: 'PDF' | 'DOCX' | 'JPG';
-  tamano?: string;
+  archivo_nombre: string;
+  tamano_bytes: number;
   observaciones?: string;
   diagnostico_cie10?: string;
 }
@@ -107,7 +109,7 @@ export interface VotoUsuario {
 }
 
 export interface HistorialClinico {
-  id_hl_clinico: number;
+  id_h_clinico: number;
   id_usuario: number; // Aprendiz
   num_ficha: string;
   fecha_apertura: string;
@@ -184,7 +186,7 @@ export interface Ficha {
   id_ficha: number;
   codigo_ficha: string;
   programa: string;
-  centro: 'CMTC' | 'CMM' | 'CEET';
+  centro: string;
   jornada?: 'Diurna' | 'Nocturna' | 'Mixta' | 'Fines de Semana';
   estado?: boolean;
   usuarios?: Usuario[];
@@ -209,6 +211,7 @@ export interface Formulario {
   tiempo_estimado?: string;
   id_comunidad?: string;
   respondido?: boolean;
+  respuestas_count?: number;
 }
 
 export interface Comunidad {

@@ -25,6 +25,10 @@ interface HomePsicologoProps {
   citas: Cita[];
   aprendicesSeguimiento: Usuario[];
   publicaciones: Publicacion[];
+  onVote: (id_pub: number, delta: number) => void;
+  votosUsuario: Record<number, number>;
+  publicacionesGuardadas: Record<number, boolean>;
+  onToggleSave: (id_pub: number) => void;
   onOpenCreatePublicacion: () => void;
   onSelectAprendizHistoria: (aprendiz: Usuario) => void;
   onRefreshCitas: () => void;
@@ -36,6 +40,10 @@ export const HomePsicologo: React.FC<HomePsicologoProps> = ({
   citas = [],
   aprendicesSeguimiento = [],
   publicaciones = [],
+  onVote,
+  votosUsuario,
+  publicacionesGuardadas,
+  onToggleSave,
   onOpenCreatePublicacion,
   onSelectAprendizHistoria,
   onRefreshCitas,
@@ -47,8 +55,9 @@ export const HomePsicologo: React.FC<HomePsicologoProps> = ({
     aprendicesSeguimiento[0]?.id_usuario || 0
   );
   const [motivoSolicitud, setMotivoSolicitud] = useState('');
-  const [userVotes, setUserVotes] = useState<Record<number, number>>({});
-  const [savedPosts, setSavedPosts] = useState<number[]>([]);
+  const [fechaSolicitud, setFechaSolicitud] = useState('');
+  const [guardandoSolicitud, setGuardandoSolicitud] = useState(false);
+  const [errorSolicitud, setErrorSolicitud] = useState('');
   const [copiedId, setCopiedId] = useState<number | null>(null);
 
   // Filtrado de citas
@@ -86,31 +95,32 @@ export const HomePsicologo: React.FC<HomePsicologoProps> = ({
     }
   };
 
-  const handleEnviarSolicitud = (e: React.FormEvent) => {
+  const handleEnviarSolicitud = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!aprendizSeleccionadoId || !motivoSolicitud) return;
-
-    serenaApi.solicitarCitaSinAgendar(currentUser.id_usuario, aprendizSeleccionadoId, motivoSolicitud);
-    setModalSolicitarCita(false);
-    setMotivoSolicitud('');
-    onRefreshCitas();
+    if (!aprendizSeleccionadoId || !motivoSolicitud.trim() || !fechaSolicitud) return;
+    setGuardandoSolicitud(true);
+    setErrorSolicitud('');
+    try {
+      await serenaApi.agendarCitaEnApi({
+        fecha_hora: new Date(fechaSolicitud).toISOString(),
+        motivo: motivoSolicitud.trim(),
+        estado_cita: 'Pendiente',
+        id_usuario_aprendiz: aprendizSeleccionadoId,
+        id_usuario_psicologo: currentUser.id_usuario,
+      });
+      setModalSolicitarCita(false);
+      setMotivoSolicitud('');
+      setFechaSolicitud('');
+      await onRefreshCitas();
+    } catch (error) {
+      setErrorSolicitud(error instanceof Error ? error.message : 'No se pudo guardar la cita.');
+    } finally {
+      setGuardandoSolicitud(false);
+    }
   };
 
   const handleVoteClick = (id_pub: number, direction: number) => {
-    const currentVote = userVotes[id_pub] || 0;
-    let newVote = 0;
-    if (currentVote === direction) {
-      newVote = 0;
-    } else {
-      newVote = direction;
-    }
-    setUserVotes((prev) => ({ ...prev, [id_pub]: newVote }));
-  };
-
-  const toggleSave = (id_pub: number) => {
-    setSavedPosts((prev) =>
-      prev.includes(id_pub) ? prev.filter((id) => id !== id_pub) : [...prev, id_pub]
-    );
+    onVote(id_pub, direction);
   };
 
   const handleShare = (pub: Publicacion) => {
@@ -276,7 +286,7 @@ export const HomePsicologo: React.FC<HomePsicologoProps> = ({
                             {cita.aprendiz?.nombre_usuario || 'Aprendiz'}
                           </span>
                           <span className="text-[11px] text-slate-400 font-normal">
-                            Ficha {cita.aprendiz?.num_ficha || '3288046'}
+                            {cita.aprendiz?.num_ficha ? `Ficha ${cita.aprendiz.num_ficha}` : 'Ficha sin registrar'}
                           </span>
                           <span className={`text-[10px] font-semibold px-2 py-0.5 rounded-full ${badgeColor}`}>
                             {cita.estado_cita}
@@ -413,7 +423,7 @@ export const HomePsicologo: React.FC<HomePsicologoProps> = ({
                     </div>
 
                     <p className="text-[11px] text-slate-600 leading-snug">
-                      Estrés situacional detectado en registro de bienestar.
+                      Estado de ánimo prioritario registrado.
                     </p>
 
                     <div className="flex items-center justify-between pt-1 border-t border-slate-100 text-xs">
@@ -477,9 +487,9 @@ export const HomePsicologo: React.FC<HomePsicologoProps> = ({
               </div>
             ) : (
               misPublicaciones.map((pub) => {
-                const userVote = userVotes[pub.id_publicaciones] || 0;
+                const userVote = votosUsuario[pub.id_publicaciones] || 0;
                 const votosTotales = pub.votos || 0;
-                const isSaved = savedPosts.includes(pub.id_publicaciones);
+                const isSaved = Boolean(publicacionesGuardadas[pub.id_publicaciones]);
 
                 return (
                   <article
@@ -565,7 +575,7 @@ export const HomePsicologo: React.FC<HomePsicologoProps> = ({
                       </button>
 
                       <button
-                        onClick={() => toggleSave(pub.id_publicaciones)}
+                        onClick={() => onToggleSave(pub.id_publicaciones)}
                         className={`inline-flex items-center justify-center bg-slate-100 hover:bg-slate-200/80 rounded-full p-2 text-xs font-medium text-slate-700 transition-colors cursor-pointer ${
                           isSaved ? 'text-[#39A900]' : ''
                         }`}
@@ -618,7 +628,6 @@ export const HomePsicologo: React.FC<HomePsicologoProps> = ({
                       <span className="text-[#7E22CE] font-medium">
                         ▲ {p.votos || 0} votos
                       </span>
-                      <span className="text-[#2E8500] font-medium">96% positivo</span>
                     </div>
                   </div>
                 ))}
@@ -664,6 +673,20 @@ export const HomePsicologo: React.FC<HomePsicologoProps> = ({
 
               <div>
                 <label className="block font-semibold text-slate-700 mb-1">
+                  Fecha y hora:
+                </label>
+                <input
+                  type="datetime-local"
+                  required
+                  min={new Date().toISOString().slice(0, 16)}
+                  value={fechaSolicitud}
+                  onChange={(e) => setFechaSolicitud(e.target.value)}
+                  className="w-full text-xs px-3 py-2 rounded-xl border border-slate-200 focus:border-[#7E22CE] focus:outline-none"
+                />
+              </div>
+
+              <div>
+                <label className="block font-semibold text-slate-700 mb-1">
                   Motivo institucional:
                 </label>
                 <textarea
@@ -676,6 +699,8 @@ export const HomePsicologo: React.FC<HomePsicologoProps> = ({
                 />
               </div>
 
+              {errorSolicitud && <p role="alert" className="text-xs text-rose-700">{errorSolicitud}</p>}
+
               <div className="flex items-center justify-end gap-2 pt-2 border-t border-slate-100">
                 <button
                   type="button"
@@ -686,9 +711,10 @@ export const HomePsicologo: React.FC<HomePsicologoProps> = ({
                 </button>
                 <button
                   type="submit"
+                  disabled={guardandoSolicitud}
                   className="px-4 py-2 rounded-xl font-medium text-white bg-[#7E22CE] hover:bg-[#6B21A8] transition-colors"
                 >
-                  Enviar Solicitud
+                  {guardandoSolicitud ? 'Guardando...' : 'Enviar Solicitud'}
                 </button>
               </div>
             </form>

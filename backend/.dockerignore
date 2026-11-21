@@ -1,0 +1,4 @@
+bin/
+obj/
+SerenaApi.Tests/
+.git/
